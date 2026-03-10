@@ -622,4 +622,3 @@ CREATE INDEX IF NOT EXISTS idx_rejected_requests_received_at
 | 분류기 실패 | 모델 파일 누락/런타임 오류 | fail-open: job error, 차단 없음 |
 | 큐 가득 참 | 5000개 초과 유입 | 신규 드롭 + 드롭 카운터 증가 + 웹훅 응답은 200 유지 |
 | 서비스 재시작/정체 | 워커 강제 종료 후 재시작 | 30분 이상 processing 잡이 queued로 복구(stale recovery) |
-
