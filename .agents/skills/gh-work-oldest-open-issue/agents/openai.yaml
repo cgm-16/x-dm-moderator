@@ -1,0 +1,4 @@
+interface:
+  display_name: "Work Oldest Open Issue"
+  short_description: "Pick the oldest GitHub issue and work it in a new worktree"
+  default_prompt: "Use $gh-work-oldest-open-issue to pick the oldest open GitHub issue, create a new worktree, implement the work, and sync todo.md with what was actually done."
