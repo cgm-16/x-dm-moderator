@@ -1,3 +1,7 @@
+import base64
+import hashlib
+import hmac
+
 from fastapi import Request
 from fastapi.testclient import TestClient
 
@@ -12,6 +16,17 @@ def build_config(*, debug: bool = False) -> AppConfig:
         public_hostname="dmguard.duckdns.org",
         acme_email="ori@example.com",
     )
+
+
+class StubSecretStore:
+    def __init__(self, consumer_secret: str) -> None:
+        self._consumer_secret = consumer_secret
+
+    def get(self, key: str) -> str:
+        if key != "x_consumer_secret":
+            raise AssertionError(f"Unexpected secret key: {key}")
+
+        return self._consumer_secret
 
 
 def test_create_app_succeeds_without_db() -> None:
@@ -42,6 +57,36 @@ def test_version_endpoint_returns_stub_version() -> None:
 
     assert response.status_code == 200
     assert response.json() == {"version": APP_VERSION}
+
+
+def test_crc_endpoint_returns_expected_response_token() -> None:
+    from dmguard.app import create_app
+
+    crc_token = "challenge-token"
+    consumer_secret = "consumer-secret"
+    client = TestClient(create_app(build_config(), StubSecretStore(consumer_secret)))
+
+    response = client.get("/webhooks/x", params={"crc_token": crc_token})
+
+    expected_digest = hmac.digest(
+        consumer_secret.encode("utf-8"),
+        crc_token.encode("utf-8"),
+        hashlib.sha256,
+    )
+    expected_token = base64.b64encode(expected_digest).decode("utf-8")
+
+    assert response.status_code == 200
+    assert response.json() == {"response_token": f"sha256={expected_token}"}
+
+
+def test_crc_endpoint_returns_400_when_crc_token_is_missing() -> None:
+    from dmguard.app import create_app
+
+    client = TestClient(create_app(build_config(), StubSecretStore("consumer-secret")))
+
+    response = client.get("/webhooks/x")
+
+    assert response.status_code == 400
 
 
 def test_non_debug_app_hides_docs_and_openapi() -> None:

@@ -1,8 +1,13 @@
-from fastapi import FastAPI
+import base64
+import hashlib
+import hmac
+
+from fastapi import FastAPI, HTTPException
 from starlette.responses import JSONResponse
 from starlette.types import ASGIApp, Message, Receive, Scope, Send
 
 from dmguard.config import AppConfig
+from dmguard.secrets import FileSecretStore, SecretStore
 
 
 APP_VERSION = "0.1.0"
@@ -51,10 +56,24 @@ class RequestBodyLimitMiddleware:
         await self.app(scope, buffered_receive, send)
 
 
-def create_app(config: AppConfig) -> FastAPI:
+def build_crc_response_token(crc_token: str, consumer_secret: str) -> str:
+    digest = hmac.digest(
+        consumer_secret.encode("utf-8"),
+        crc_token.encode("utf-8"),
+        hashlib.sha256,
+    )
+    encoded_digest = base64.b64encode(digest).decode("utf-8")
+    return f"sha256={encoded_digest}"
+
+
+def create_app(
+    config: AppConfig,
+    secret_store: SecretStore | None = None,
+) -> FastAPI:
     docs_url = "/docs" if config.debug else None
     redoc_url = "/redoc" if config.debug else None
     openapi_url = "/openapi.json" if config.debug else None
+    app_secret_store = secret_store or FileSecretStore()
 
     app = FastAPI(
         docs_url=docs_url,
@@ -67,6 +86,15 @@ def create_app(config: AppConfig) -> FastAPI:
         max_body_bytes=MAX_REQUEST_BODY_BYTES,
     )
 
+    @app.get("/webhooks/x")
+    async def crc(crc_token: str | None = None) -> dict[str, str]:
+        if crc_token is None:
+            raise HTTPException(status_code=400, detail="Missing crc_token")
+
+        consumer_secret = app_secret_store.get("x_consumer_secret")
+        response_token = build_crc_response_token(crc_token, consumer_secret)
+        return {"response_token": response_token}
+
     @app.get("/health")
     async def health() -> dict[str, bool]:
         return {"ok": True}
@@ -78,4 +106,9 @@ def create_app(config: AppConfig) -> FastAPI:
     return app
 
 
-__all__ = ["APP_VERSION", "MAX_REQUEST_BODY_BYTES", "create_app"]
+__all__ = [
+    "APP_VERSION",
+    "MAX_REQUEST_BODY_BYTES",
+    "build_crc_response_token",
+    "create_app",
+]
