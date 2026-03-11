@@ -300,7 +300,7 @@ Project: X DM Image Safety Filter Prototype (v0.1)
 - [ ] Implement setup state machine
 - [x] Implement stage invalidation
 - [x] Implement verbose output
-- [ ] Implement setup log writer
+- [x] Implement setup log writer
 - [x] Add setup-state tests
 
 ---
