@@ -108,7 +108,7 @@ Project: X DM Image Safety Filter Prototype (v0.1)
 - [x] Enqueue all MessageCreate events, even if no media
 - [x] Persist trimmed subset for valid events
 - [x] Rejected requests go to `rejected_requests`
-- [ ] Implement signature verification
+- [x] Implement signature verification
 - [ ] Implement idempotent enqueue by `event_id`
 - [ ] Implement trimmed event persistence
 - [ ] Implement rejected request persistence

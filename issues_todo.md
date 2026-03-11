@@ -40,7 +40,7 @@ GitHub repo: https://github.com/cgm-16/x-dm-moderator
 ## Milestone 5 — Webhook Receiver
 
 - [x] #15 CRC endpoint — deps: #4, #2
-- [ ] #16 Signature verification — deps: #4
+- [x] #16 Signature verification — deps: #4
 - [ ] #17 Webhook POST + idempotent enqueue — deps: #7, #16
 - [ ] #18 Rejected request persistence — deps: #7, #16
 
