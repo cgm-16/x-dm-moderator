@@ -79,6 +79,12 @@ def test_version_endpoint_returns_version_metadata() -> None:
     }
 
 
+def test_dep_version_returns_unknown_for_missing_package() -> None:
+    from dmguard.app import _dep_version
+
+    assert _dep_version("no-such-package-xyzzy") == "unknown"
+
+
 def test_version_endpoint_caches_payload_at_app_creation(monkeypatch) -> None:
     import dmguard.app as app_module
 
