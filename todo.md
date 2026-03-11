@@ -298,10 +298,10 @@ Project: X DM Image Safety Filter Prototype (v0.1)
 - [x] Setup writes append-only `setup.log`
 - [x] `setup.log` always redacts secrets
 - [ ] Implement setup state machine
-- [ ] Implement stage invalidation
-- [ ] Implement verbose output
+- [x] Implement stage invalidation
+- [x] Implement verbose output
 - [ ] Implement setup log writer
-- [ ] Add setup-state tests
+- [x] Add setup-state tests
 
 ---
 

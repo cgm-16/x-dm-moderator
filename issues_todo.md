@@ -82,7 +82,7 @@ GitHub repo: https://github.com/cgm-16/x-dm-moderator
 ## Milestone 12 — Setup Orchestration
 
 - [x] #36 Setup state machine + setup_state.json — deps: #1
-- [ ] #37 Stage invalidation + verbose output — deps: #36
+- [x] #37 Stage invalidation + verbose output — deps: #36
 - [ ] #38 Setup.log writer + secret redaction — deps: #36
 
 ## Milestone 13 — Setup Stages + Admin CLI
