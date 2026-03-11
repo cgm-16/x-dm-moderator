@@ -1,6 +1,10 @@
 import base64
 import hashlib
 import hmac
+from importlib import metadata
+from pathlib import Path
+import platform
+import tomllib
 
 from fastapi import FastAPI, HTTPException
 from starlette.responses import JSONResponse
@@ -12,6 +16,8 @@ from dmguard.secrets import FileSecretStore, SecretStore
 
 APP_VERSION = "0.1.0"
 MAX_REQUEST_BODY_BYTES = 1_048_576
+PACKAGE_NAME = "x-dm-moderator"
+PYPROJECT_PATH = Path(__file__).resolve().parents[1] / "pyproject.toml"
 
 
 class RequestBodyLimitMiddleware:
@@ -66,6 +72,37 @@ def build_crc_response_token(crc_token: str, consumer_secret: str) -> str:
     return f"sha256={encoded_digest}"
 
 
+def load_app_version() -> str:
+    try:
+        return metadata.version(PACKAGE_NAME)
+    except metadata.PackageNotFoundError:
+        try:
+            with PYPROJECT_PATH.open("rb") as fh:
+                pyproject = tomllib.load(fh)
+        except (FileNotFoundError, tomllib.TOMLDecodeError):
+            return APP_VERSION
+
+        project = pyproject.get("project")
+        if not isinstance(project, dict):
+            return APP_VERSION
+
+        version = project.get("version")
+        if not isinstance(version, str) or not version:
+            return APP_VERSION
+
+        return version
+
+
+def build_version_info() -> dict[str, str]:
+    return {
+        "version": load_app_version(),
+        "python": platform.python_version(),
+        "fastapi": metadata.version("fastapi"),
+        "aiosqlite": metadata.version("aiosqlite"),
+        "httpx": metadata.version("httpx"),
+    }
+
+
 def create_app(
     config: AppConfig,
     secret_store: SecretStore | None = None,
@@ -74,13 +111,15 @@ def create_app(
     redoc_url = "/redoc" if config.debug else None
     openapi_url = "/openapi.json" if config.debug else None
     app_secret_store = secret_store or FileSecretStore()
+    version_info = build_version_info()
 
     app = FastAPI(
         docs_url=docs_url,
         redoc_url=redoc_url,
         openapi_url=openapi_url,
-        version=APP_VERSION,
+        version=version_info["version"],
     )
+    app.state.version_info = version_info
     app.add_middleware(
         RequestBodyLimitMiddleware,
         max_body_bytes=MAX_REQUEST_BODY_BYTES,
@@ -101,7 +140,7 @@ def create_app(
 
     @app.get("/version")
     async def version() -> dict[str, str]:
-        return {"version": APP_VERSION}
+        return version_info
 
     return app
 

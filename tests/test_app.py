@@ -1,6 +1,10 @@
 import base64
 import hashlib
 import hmac
+from importlib import metadata
+from pathlib import Path
+import platform
+import tomllib
 
 from fastapi import Request
 from fastapi.testclient import TestClient
@@ -29,6 +33,16 @@ class StubSecretStore:
         return self._consumer_secret
 
 
+def expected_app_version() -> str:
+    try:
+        return metadata.version("x-dm-moderator")
+    except metadata.PackageNotFoundError:
+        with (Path(__file__).resolve().parents[1] / "pyproject.toml").open("rb") as fh:
+            pyproject = tomllib.load(fh)
+
+        return pyproject["project"]["version"]
+
+
 def test_create_app_succeeds_without_db() -> None:
     from dmguard.app import create_app
 
@@ -48,7 +62,7 @@ def test_health_endpoint_returns_ok_payload() -> None:
     assert response.json() == {"ok": True}
 
 
-def test_version_endpoint_returns_stub_version() -> None:
+def test_version_endpoint_returns_version_metadata() -> None:
     from dmguard.app import create_app
 
     client = TestClient(create_app(build_config()))
@@ -56,7 +70,45 @@ def test_version_endpoint_returns_stub_version() -> None:
     response = client.get("/version")
 
     assert response.status_code == 200
-    assert response.json() == {"version": APP_VERSION}
+    assert response.json() == {
+        "version": expected_app_version(),
+        "python": platform.python_version(),
+        "fastapi": metadata.version("fastapi"),
+        "aiosqlite": metadata.version("aiosqlite"),
+        "httpx": metadata.version("httpx"),
+    }
+
+
+def test_version_endpoint_caches_payload_at_app_creation(monkeypatch) -> None:
+    import dmguard.app as app_module
+
+    build_calls = 0
+    cached_version_info = {
+        "version": APP_VERSION,
+        "python": "3.12.12",
+        "fastapi": "1.0.0",
+        "aiosqlite": "2.0.0",
+        "httpx": "3.0.0",
+    }
+
+    def fake_build_version_info() -> dict[str, str]:
+        nonlocal build_calls
+
+        build_calls += 1
+        return cached_version_info
+
+    monkeypatch.setattr(app_module, "build_version_info", fake_build_version_info)
+
+    client = TestClient(app_module.create_app(build_config()))
+
+    first_response = client.get("/version")
+    second_response = client.get("/version")
+
+    assert first_response.status_code == 200
+    assert second_response.status_code == 200
+    assert first_response.json() == cached_version_info
+    assert second_response.json() == cached_version_info
+    assert build_calls == 1
 
 
 def test_crc_endpoint_returns_expected_response_token() -> None:
