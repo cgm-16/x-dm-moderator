@@ -1,13 +1,13 @@
 ---
 name: gh-work-oldest-open-issue
-description: Work the oldest open GitHub issue in a repository from a fresh git worktree. Use when Ori wants Codex to choose the earliest-created open issue automatically, implement the issue on a feature branch based on main, and keep the repository's todo.md aligned with what was actually completed and verified.
+description: Work the oldest open GitHub issue in a repository from a fresh git worktree. Use when Ori wants Codex to choose the earliest-created open issue automatically, implement the issue on a feature branch based on main, and keep the repository's todo.md and issues_todo.md aligned with what was actually completed and verified.
 ---
 
 # Work Oldest Open Issue
 
 ## Overview
 
-Use this skill when no issue number is provided and backlog work should be taken in issue age order. Read the repository instructions first, select the oldest dependency-ready open issue by `createdAt`, create a new worktree from an updated `main`, execute the issue with the repository's debugging and testing rules, and update `todo.md` only for work that is truly done.
+Use this skill when no issue number is provided and backlog work should be taken in issue age order. Read the repository instructions first, select the oldest dependency-ready open issue by `createdAt`, create a new worktree from an updated `main`, execute the issue with the repository's debugging and testing rules, and update `todo.md` and `issues_todo.md` only for work that is truly done.
 
 ## Workflow
 
@@ -60,12 +60,12 @@ Use this skill when no issue number is provided and backlog work should be taken
    - Match the surrounding style and leave unrelated files alone.
    - If the first hypothesis fails, stop and re-analyze instead of stacking fixes.
 
-6. Keep `todo.md` honest.
+6. Keep `todo.md` and `issues_todo.md` honest.
    - Update only the checklist items that are actually complete in the current branch.
    - Mark acceptance criteria complete only when they were verified.
    - Leave future work unchecked.
    - If an issue covers only part of a section, use the repository's existing status markers conservatively.
-   - `todo.md` must describe the real state of the branch, not the intended scope.
+   - `todo.md` and `issues_todo.md` must describe the real state of the branch, not the intended scope.
 
 7. Close out cleanly.
    - Run the relevant tests and note what was and was not verified.
@@ -78,5 +78,5 @@ Use this skill when no issue number is provided and backlog work should be taken
 - The selected issue is the earliest dependency-ready open issue by `createdAt`.
 - The work happens in a new worktree on a feature branch based on updated `main`.
 - The implementation matches the issue scope and has test or verification evidence.
-- `todo.md` matches what was actually completed and verified.
+- `todo.md` and `issues_todo.md` match what was actually completed and verified.
 - The final report includes the issue reference, branch name, worktree path, tests run, and blockers.
