@@ -154,9 +154,9 @@ Project: X DM Image Safety Filter Prototype (v0.1)
 - [x] Queue overflow is tracked with counters only
 - [ ] Implement worker loop
 - [ ] Implement transactional claim/update logic
-- [ ] Implement retry scheduling
+- [x] Implement retry scheduling
 - [ ] Implement queue overflow counters
-- [ ] Add scheduler tests
+- [x] Add scheduler tests
 
 ---
 
