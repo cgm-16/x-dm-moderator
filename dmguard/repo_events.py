@@ -11,13 +11,14 @@ async def insert_event(
     payload_json: str,
     sender_id: str | None = None,
 ) -> None:
-    await connection.execute(
+    cursor = await connection.execute(
         """
         INSERT INTO webhook_events (event_id, received_at, payload_json, sender_id)
         VALUES (?, ?, ?, ?)
         """,
         (event_id, received_at, payload_json, sender_id),
     )
+    await cursor.close()
 
 
 async def get_event(

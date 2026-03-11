@@ -30,7 +30,7 @@ async def kv_set(
     value: str,
     updated_at: str,
 ) -> None:
-    await connection.execute(
+    cursor = await connection.execute(
         """
         INSERT INTO kv_store (key, value, updated_at)
         VALUES (?, ?, ?)
@@ -40,6 +40,7 @@ async def kv_set(
         """,
         (key, value, updated_at),
     )
+    await cursor.close()
 
 
 __all__ = ["kv_get", "kv_set"]

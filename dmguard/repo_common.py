@@ -2,6 +2,8 @@ from collections.abc import Sequence
 
 import aiosqlite
 
+_UNCHANGED = object()
+
 
 async def fetch_one_dict(
     connection: aiosqlite.Connection,

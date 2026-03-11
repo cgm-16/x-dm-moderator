@@ -1,8 +1,6 @@
 import aiosqlite
 
-from dmguard.repo_common import fetch_one_dict
-
-_UNCHANGED = object()
+from dmguard.repo_common import _UNCHANGED, fetch_one_dict
 
 
 async def insert_allowed_sender(
@@ -11,13 +9,14 @@ async def insert_allowed_sender(
     sender_id: str,
     source_event_id: str,
 ) -> None:
-    await connection.execute(
+    cursor = await connection.execute(
         """
         INSERT INTO allowed_senders (sender_id, source_event_id)
         VALUES (?, ?)
         """,
         (sender_id, source_event_id),
     )
+    await cursor.close()
 
 
 async def get_allowed_sender(
@@ -41,13 +40,14 @@ async def insert_blocked_sender(
     sender_id: str,
     source_event_id: str | None = None,
 ) -> None:
-    await connection.execute(
+    cursor = await connection.execute(
         """
         INSERT INTO blocked_senders (sender_id, source_event_id)
         VALUES (?, ?)
         """,
         (sender_id, source_event_id),
     )
+    await cursor.close()
 
 
 async def get_blocked_sender(
@@ -77,7 +77,7 @@ async def upsert_block_failed_sender(
     insert_first_failed_at = None if first_failed_at is _UNCHANGED else first_failed_at
     insert_last_failed_at = None if last_failed_at is _UNCHANGED else last_failed_at
 
-    await connection.execute(
+    cursor = await connection.execute(
         """
         INSERT INTO block_failed_senders (
           sender_id,
@@ -94,7 +94,7 @@ async def upsert_block_failed_sender(
           ?
         )
         ON CONFLICT(sender_id) DO UPDATE SET
-          first_failed_at = COALESCE(excluded.first_failed_at, block_failed_senders.first_failed_at),
+          first_failed_at = block_failed_senders.first_failed_at,
           last_failed_at = COALESCE(excluded.last_failed_at, block_failed_senders.last_failed_at),
           next_retry_at = excluded.next_retry_at,
           fail_count = excluded.fail_count
@@ -107,6 +107,7 @@ async def upsert_block_failed_sender(
             fail_count,
         ),
     )
+    await cursor.close()
 
 
 async def get_block_failed_sender(

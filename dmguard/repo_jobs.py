@@ -3,9 +3,7 @@ from enum import Enum
 import aiosqlite
 
 from dmguard.job_machine import JobStage, JobStatus
-from dmguard.repo_common import fetch_all_dicts, fetch_one_dict
-
-_UNCHANGED = object()
+from dmguard.repo_common import _UNCHANGED, fetch_all_dicts, fetch_one_dict
 
 
 def _enum_value(value: object) -> object:
