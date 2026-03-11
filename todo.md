@@ -88,7 +88,7 @@ Project: X DM Image Safety Filter Prototype (v0.1)
 ## 5. Runtime API surface
 
 - [x] Implement `GET /webhooks/x` for CRC
-- [ ] Implement `POST /webhooks/x` for webhook deliveries
+- [x] Implement `POST /webhooks/x` for webhook deliveries
 - [ ] Implement `GET /health`
 - [x] Implement `GET /version`
 - [ ] Implement optional local-only `/webhooks/test` in debug mode
@@ -109,8 +109,8 @@ Project: X DM Image Safety Filter Prototype (v0.1)
 - [x] Persist trimmed subset for valid events
 - [x] Rejected requests go to `rejected_requests`
 - [x] Implement signature verification
-- [ ] Implement idempotent enqueue by `event_id`
-- [ ] Implement trimmed event persistence
+- [x] Implement idempotent enqueue by `event_id`
+- [x] Implement trimmed event persistence
 - [ ] Implement rejected request persistence
 
 ---

@@ -41,7 +41,7 @@ GitHub repo: https://github.com/cgm-16/x-dm-moderator
 
 - [x] #15 CRC endpoint — deps: #4, #2
 - [x] #16 Signature verification — deps: #4
-- [ ] #17 Webhook POST + idempotent enqueue — deps: #7, #16
+- [x] #17 Webhook POST + idempotent enqueue — deps: #7, #16
 - [ ] #18 Rejected request persistence — deps: #7, #16
 
 ## Milestone 6 — X API Client

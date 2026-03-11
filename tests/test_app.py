@@ -1,7 +1,9 @@
+import asyncio
 import base64
 import hashlib
 import hmac
 from importlib import metadata
+import json
 from pathlib import Path
 import platform
 import tomllib
@@ -31,6 +33,61 @@ class StubSecretStore:
             raise AssertionError(f"Unexpected secret key: {key}")
 
         return self._consumer_secret
+
+
+def run(coroutine):
+    return asyncio.run(coroutine)
+
+
+def build_signature(raw_body: bytes, consumer_secret: str) -> str:
+    digest = hmac.new(
+        consumer_secret.encode("utf-8"),
+        raw_body,
+        hashlib.sha256,
+    ).digest()
+    encoded = base64.b64encode(digest).decode("ascii")
+    return f"sha256={encoded}"
+
+
+async def bootstrap_database(db_path: Path) -> None:
+    from dmguard.db import get_connection
+    from dmguard.schema import bootstrap_schema
+
+    async with get_connection(db_path) as connection:
+        await bootstrap_schema(connection)
+
+
+async def fetch_all_rows(
+    db_path: Path,
+    query: str,
+    params: tuple[object, ...] = (),
+) -> list[tuple[object, ...]]:
+    from dmguard.db import get_connection
+
+    async with get_connection(db_path) as connection:
+        cursor = await connection.execute(query, params)
+
+        try:
+            return await cursor.fetchall()
+        finally:
+            await cursor.close()
+
+
+def build_webhook_client(
+    tmp_path: Path,
+    *,
+    consumer_secret: str = "consumer-secret",
+) -> tuple[TestClient, Path]:
+    from dmguard.app import create_app
+
+    db_path = tmp_path / "state.db"
+    run(bootstrap_database(db_path))
+    app = create_app(
+        build_config(),
+        StubSecretStore(consumer_secret),
+        db_path=db_path,
+    )
+    return TestClient(app), db_path
 
 
 def expected_app_version() -> str:
@@ -198,3 +255,254 @@ def test_request_body_limit_rejects_payloads_over_one_megabyte() -> None:
     response = client.post("/echo", content=b"x" * (MAX_REQUEST_BODY_BYTES + 1))
 
     assert response.status_code == 413
+
+
+def test_webhook_post_rejects_bad_signature_and_persists_request(
+    tmp_path: Path,
+) -> None:
+    client, db_path = build_webhook_client(tmp_path)
+    raw_body = json.dumps(
+        {"events": [{"event_type": "MessageCreate", "id": "event-1"}]}
+    ).encode("utf-8")
+
+    response = client.post(
+        "/webhooks/x",
+        content=raw_body,
+        headers={"x-twitter-webhooks-signature": "sha256=bad-signature"},
+    )
+
+    rejected_rows = run(
+        fetch_all_rows(
+            db_path,
+            "SELECT path, reason FROM rejected_requests ORDER BY id ASC",
+        )
+    )
+
+    assert response.status_code == 403
+    assert rejected_rows == [("/webhooks/x", "bad_signature")]
+
+
+def test_webhook_post_rejects_oversized_body_and_persists_request(
+    tmp_path: Path,
+) -> None:
+    consumer_secret = "consumer-secret"
+    client, db_path = build_webhook_client(tmp_path, consumer_secret=consumer_secret)
+    raw_body = b"x" * (MAX_REQUEST_BODY_BYTES + 1)
+
+    response = client.post(
+        "/webhooks/x",
+        content=raw_body,
+        headers={
+            "x-twitter-webhooks-signature": build_signature(raw_body, consumer_secret)
+        },
+    )
+
+    rejected_rows = run(
+        fetch_all_rows(
+            db_path,
+            "SELECT path, reason FROM rejected_requests ORDER BY id ASC",
+        )
+    )
+
+    assert response.status_code == 413
+    assert rejected_rows == [("/webhooks/x", "oversized")]
+
+
+def test_webhook_post_rejects_invalid_json_and_persists_request(tmp_path: Path) -> None:
+    consumer_secret = "consumer-secret"
+    client, db_path = build_webhook_client(tmp_path, consumer_secret=consumer_secret)
+    raw_body = b'{"events": ['
+
+    response = client.post(
+        "/webhooks/x",
+        content=raw_body,
+        headers={
+            "x-twitter-webhooks-signature": build_signature(raw_body, consumer_secret)
+        },
+    )
+
+    rejected_rows = run(
+        fetch_all_rows(
+            db_path,
+            "SELECT path, reason FROM rejected_requests ORDER BY id ASC",
+        )
+    )
+
+    assert response.status_code == 400
+    assert rejected_rows == [("/webhooks/x", "invalid_json")]
+
+
+def test_webhook_post_enqueues_legacy_message_create_event(tmp_path: Path) -> None:
+    consumer_secret = "consumer-secret"
+    client, db_path = build_webhook_client(tmp_path, consumer_secret=consumer_secret)
+    payload = {
+        "direct_message_events": [
+            {
+                "type": "message_create",
+                "id": "legacy-event-1",
+                "message_create": {
+                    "sender_id": "sender-1",
+                    "message_data": {"text": "hello"},
+                },
+            }
+        ]
+    }
+    raw_body = json.dumps(payload).encode("utf-8")
+
+    response = client.post(
+        "/webhooks/x",
+        content=raw_body,
+        headers={
+            "x-twitter-webhooks-signature": build_signature(raw_body, consumer_secret)
+        },
+    )
+
+    event_rows = run(
+        fetch_all_rows(
+            db_path,
+            """
+            SELECT event_id, payload_json, sender_id
+            FROM webhook_events
+            ORDER BY event_id ASC
+            """,
+        )
+    )
+    job_rows = run(
+        fetch_all_rows(
+            db_path,
+            """
+            SELECT event_id, status, stage, attempt, sender_id
+            FROM jobs
+            ORDER BY job_id ASC
+            """,
+        )
+    )
+
+    assert response.status_code == 200
+    assert len(event_rows) == 1
+    assert event_rows[0][0] == "legacy-event-1"
+    assert json.loads(str(event_rows[0][1])) == payload["direct_message_events"][0]
+    assert event_rows[0][2] == "sender-1"
+    assert job_rows == [
+        ("legacy-event-1", "queued", "fetch_dm", 0, "sender-1"),
+    ]
+
+
+def test_webhook_post_enqueues_v2_message_create_event(tmp_path: Path) -> None:
+    consumer_secret = "consumer-secret"
+    client, db_path = build_webhook_client(tmp_path, consumer_secret=consumer_secret)
+    payload = {
+        "events": [
+            {
+                "event_type": "MessageCreate",
+                "id": "v2-event-1",
+                "sender_id": "sender-2",
+                "text": "hello",
+            }
+        ]
+    }
+    raw_body = json.dumps(payload).encode("utf-8")
+
+    response = client.post(
+        "/webhooks/x",
+        content=raw_body,
+        headers={
+            "x-twitter-webhooks-signature": build_signature(raw_body, consumer_secret)
+        },
+    )
+
+    event_rows = run(
+        fetch_all_rows(
+            db_path,
+            """
+            SELECT event_id, payload_json, sender_id
+            FROM webhook_events
+            ORDER BY event_id ASC
+            """,
+        )
+    )
+    job_rows = run(
+        fetch_all_rows(
+            db_path,
+            """
+            SELECT event_id, status, stage, attempt, sender_id
+            FROM jobs
+            ORDER BY job_id ASC
+            """,
+        )
+    )
+
+    assert response.status_code == 200
+    assert len(event_rows) == 1
+    assert event_rows[0][0] == "v2-event-1"
+    assert json.loads(str(event_rows[0][1])) == payload["events"][0]
+    assert event_rows[0][2] == "sender-2"
+    assert job_rows == [
+        ("v2-event-1", "queued", "fetch_dm", 0, "sender-2"),
+    ]
+
+
+def test_webhook_post_skips_duplicate_event_id_without_duplicate_job(
+    tmp_path: Path,
+) -> None:
+    consumer_secret = "consumer-secret"
+    client, db_path = build_webhook_client(tmp_path, consumer_secret=consumer_secret)
+    payload = {
+        "events": [
+            {
+                "event_type": "MessageCreate",
+                "id": "event-1",
+                "sender_id": "sender-1",
+            }
+        ]
+    }
+    raw_body = json.dumps(payload).encode("utf-8")
+    headers = {
+        "x-twitter-webhooks-signature": build_signature(raw_body, consumer_secret)
+    }
+
+    first_response = client.post("/webhooks/x", content=raw_body, headers=headers)
+    second_response = client.post("/webhooks/x", content=raw_body, headers=headers)
+
+    event_count = run(
+        fetch_all_rows(
+            db_path,
+            "SELECT COUNT(*) FROM webhook_events",
+        )
+    )
+    job_count = run(
+        fetch_all_rows(
+            db_path,
+            "SELECT COUNT(*) FROM jobs",
+        )
+    )
+
+    assert first_response.status_code == 200
+    assert second_response.status_code == 200
+    assert event_count == [(1,)]
+    assert job_count == [(1,)]
+
+
+def test_webhook_post_ignores_signed_unsupported_payload_shape(
+    tmp_path: Path,
+) -> None:
+    consumer_secret = "consumer-secret"
+    client, db_path = build_webhook_client(tmp_path, consumer_secret=consumer_secret)
+    raw_body = json.dumps({"events": [{"event_type": "FavoriteCreate"}]}).encode(
+        "utf-8"
+    )
+
+    response = client.post(
+        "/webhooks/x",
+        content=raw_body,
+        headers={
+            "x-twitter-webhooks-signature": build_signature(raw_body, consumer_secret)
+        },
+    )
+
+    event_count = run(fetch_all_rows(db_path, "SELECT COUNT(*) FROM webhook_events"))
+    job_count = run(fetch_all_rows(db_path, "SELECT COUNT(*) FROM jobs"))
+
+    assert response.status_code == 200
+    assert event_count == [(0,)]
+    assert job_count == [(0,)]
