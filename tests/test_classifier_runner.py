@@ -201,3 +201,40 @@ def test_run_classifier_kills_timed_out_process_and_cleans_up_input_file(
     assert elapsed < 2
     assert not input_path.exists()
     assert not completed_path.exists()
+
+
+def test_run_classifier_raises_classifier_error_on_invalid_json_output(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    from dmguard import classifier_runner
+
+    tmp_dir = tmp_path / "runner-tmp"
+    marker_path = tmp_path / "input-path.txt"
+    script_path = write_script(
+        tmp_path,
+        "classifier_bad_output.py",
+        """
+        from pathlib import Path
+        import sys
+
+        marker_path = Path(sys.argv[1])
+        input_path = Path(sys.argv[2])
+        marker_path.write_text(str(input_path), encoding="utf-8")
+        print("this is not valid json")
+        """,
+    )
+
+    monkeypatch.setattr(classifier_runner, "TMP_DIR", tmp_dir)
+
+    with pytest.raises(classifier_runner.ClassifierError):
+        classifier_runner.run_classifier(
+            {
+                "mode": "image",
+                "files": ["frame-1.jpg"],
+                "policy": "violence_gore",
+            },
+            [sys.executable, str(script_path), str(marker_path)],
+        )
+
+    input_path = read_input_path(marker_path)
+    assert not input_path.exists()
