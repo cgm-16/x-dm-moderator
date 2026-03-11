@@ -22,7 +22,7 @@ GitHub repo: https://github.com/cgm-16/x-dm-moderator
 
 - [x] #5 DB connection management — deps: #1
 - [x] #6 Schema DDL + indexes — deps: #5
-- [ ] #7 Repository layer — deps: #6
+- [x] #7 Repository layer — deps: #6
 
 ## Milestone 3 — Job State Machine
 
