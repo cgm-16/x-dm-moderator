@@ -65,7 +65,12 @@ def run_classifier(
         if process.returncode != 0:
             raise ClassifierError(stderr_text.strip() or "Classifier process failed")
 
-        return ClassifierResponse.model_validate_json(stdout_text)
+        try:
+            return ClassifierResponse.model_validate_json(stdout_text)
+        except Exception as exc:
+            raise ClassifierError(
+                f"Classifier returned invalid response: {exc}"
+            ) from exc
     finally:
         if process is not None and process.poll() is None:
             process.kill()
