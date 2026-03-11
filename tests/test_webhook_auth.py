@@ -65,7 +65,10 @@ def test_verify_x_signature_uses_compare_digest(
 
     raw_body = b'{"event_id":"123"}'
     consumer_secret = "consumer-secret"
-    expected_signature = build_signature(raw_body, consumer_secret)
+    # Use a header distinct from the computed digest so argument order is verifiable.
+    # fake_compare_digest returns True unconditionally, so the mismatch doesn't matter.
+    signature_header = "sha256=incoming-header-value"
+    computed_expected = build_signature(raw_body, consumer_secret)
     compare_digest_calls: list[tuple[str, str]] = []
 
     def fake_compare_digest(left: str, right: str) -> bool:
@@ -77,9 +80,9 @@ def test_verify_x_signature_uses_compare_digest(
     assert (
         webhook_auth.verify_x_signature(
             raw_body,
-            expected_signature,
+            signature_header,
             consumer_secret,
         )
         is True
     )
-    assert compare_digest_calls == [(expected_signature, expected_signature)]
+    assert compare_digest_calls == [(signature_header, computed_expected)]
