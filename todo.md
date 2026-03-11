@@ -131,9 +131,9 @@ Project: X DM Image Safety Filter Prototype (v0.1)
 - [x] `jobs.stage` stays on last failed stage when status=`error`
 - [x] `jobs.attempt` is current-stage attempt counter
 - [x] `allowed_senders` fields = `sender_id, created_at, source_event_id`
-- [ ] Implement schema bootstrap
+- [x] Implement schema bootstrap
 - [ ] Implement repository layer
-- [ ] Implement explicit indexes
+- [x] Implement explicit indexes
 - [ ] Add tests for schema and repository behavior
 
 ---
