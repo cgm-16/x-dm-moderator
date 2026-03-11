@@ -76,7 +76,7 @@ GitHub repo: https://github.com/cgm-16/x-dm-moderator
 
 ## Milestone 11 — Traefik + Services
 
-- [ ] #34 Template rendering — deps: #1
+- [x] #34 Template rendering — deps: #1
 - [ ] #35 Atomic routes.yml write + service definitions — deps: #34
 
 ## Milestone 12 — Setup Orchestration
