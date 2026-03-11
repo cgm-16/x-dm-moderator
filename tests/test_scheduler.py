@@ -1,3 +1,4 @@
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 import pytest
@@ -6,12 +7,255 @@ from tests.conftest import bootstrap_database, insert_event_row, insert_job_row,
 from dmguard.job_machine import JobStage, JobStatus
 
 
+def utc_iso(dt: datetime) -> str:
+    return (
+        dt.astimezone(timezone.utc)
+        .replace(microsecond=0)
+        .strftime("%Y-%m-%dT%H:%M:%SZ")
+    )
+
+
 async def fetch_job(db_path: Path, job_id: int) -> dict[str, object] | None:
     from dmguard.db import get_connection
     from dmguard.repo_jobs import get_job
 
     async with get_connection(db_path) as connection:
         return await get_job(connection, job_id)
+
+
+def test_dequeue_next_job_returns_oldest_runnable_job(tmp_path: Path) -> None:
+    db_path = tmp_path / "state.db"
+    now = datetime.now(timezone.utc).replace(microsecond=0)
+
+    run(bootstrap_database(db_path))
+    run(insert_event_row(db_path, event_id="event-1"))
+    run(insert_event_row(db_path, event_id="event-2"))
+    run(insert_event_row(db_path, event_id="event-3"))
+    run(insert_event_row(db_path, event_id="event-4"))
+
+    oldest_job_id = run(
+        insert_job_row(
+            db_path,
+            event_id="event-1",
+            next_run_at=utc_iso(now - timedelta(minutes=2)),
+        )
+    )
+    run(
+        insert_job_row(
+            db_path,
+            event_id="event-2",
+            next_run_at=utc_iso(now - timedelta(minutes=1)),
+        )
+    )
+    run(
+        insert_job_row(
+            db_path,
+            event_id="event-3",
+            next_run_at=utc_iso(now + timedelta(minutes=1)),
+        )
+    )
+    run(
+        insert_job_row(
+            db_path,
+            event_id="event-4",
+            next_run_at=utc_iso(now - timedelta(minutes=3)),
+            status=JobStatus.processing,
+        )
+    )
+
+    async def scenario() -> dict[str, object] | None:
+        from dmguard.db import get_connection
+        from dmguard.scheduler import dequeue_next_job
+
+        async with get_connection(db_path) as connection:
+            return await dequeue_next_job(connection)
+
+    job = run(scenario())
+
+    assert job is not None
+    assert job["job_id"] == oldest_job_id
+    assert job["event_id"] == "event-1"
+    assert job["status"] == JobStatus.queued.value
+
+
+def test_claim_job_is_idempotent_and_sets_processing_fields(tmp_path: Path) -> None:
+    db_path = tmp_path / "state.db"
+
+    run(bootstrap_database(db_path))
+    run(insert_event_row(db_path, event_id="event-1"))
+    job_id = run(
+        insert_job_row(
+            db_path,
+            event_id="event-1",
+            next_run_at="2026-03-11T00:00:00Z",
+        )
+    )
+
+    async def scenario() -> tuple[bool, bool, dict[str, object] | None]:
+        from dmguard.db import get_connection
+        from dmguard.repo_jobs import get_job
+        from dmguard.scheduler import claim_job
+
+        async with get_connection(db_path) as connection:
+            await connection.execute(
+                """
+                UPDATE jobs
+                SET updated_at = '2000-01-01T00:00:00Z'
+                WHERE job_id = ?
+                """,
+                (job_id,),
+            )
+            await connection.commit()
+
+        async with get_connection(db_path) as connection:
+            first_claim = await claim_job(connection, job_id)
+            second_claim = await claim_job(connection, job_id)
+            await connection.commit()
+            job = await get_job(connection, job_id)
+
+        return first_claim, second_claim, job
+
+    first_claim, second_claim, job = run(scenario())
+
+    assert first_claim is True
+    assert second_claim is False
+    assert job is not None
+    assert job["status"] == JobStatus.processing.value
+    assert job["attempt"] == 1
+    assert job["processing_started_at"] is not None
+    assert job["updated_at"] != "2000-01-01T00:00:00Z"
+
+
+def test_advance_stage_resets_attempt_and_updates_timestamp(tmp_path: Path) -> None:
+    db_path = tmp_path / "state.db"
+
+    run(bootstrap_database(db_path))
+    run(insert_event_row(db_path, event_id="event-1"))
+    job_id = run(
+        insert_job_row(
+            db_path,
+            event_id="event-1",
+            next_run_at="2026-03-11T00:00:00Z",
+            status=JobStatus.processing,
+            attempt=2,
+        )
+    )
+
+    async def scenario() -> tuple[bool, dict[str, object] | None]:
+        from dmguard.db import get_connection
+        from dmguard.repo_jobs import get_job
+        from dmguard.scheduler import advance_stage
+
+        async with get_connection(db_path) as connection:
+            await connection.execute(
+                """
+                UPDATE jobs
+                SET updated_at = '2000-01-01T00:00:00Z'
+                WHERE job_id = ?
+                """,
+                (job_id,),
+            )
+            await connection.commit()
+
+        async with get_connection(db_path) as connection:
+            advanced = await advance_stage(
+                connection,
+                job_id,
+                JobStage.download_media,
+            )
+            await connection.commit()
+            job = await get_job(connection, job_id)
+
+        return advanced, job
+
+    advanced, job = run(scenario())
+
+    assert advanced is True
+    assert job is not None
+    assert job["stage"] == JobStage.download_media.value
+    assert job["attempt"] == 0
+    assert job["updated_at"] != "2000-01-01T00:00:00Z"
+
+
+@pytest.mark.parametrize(
+    ("terminal_status"),
+    [
+        JobStatus.done,
+        JobStatus.error,
+        JobStatus.skipped,
+    ],
+)
+def test_complete_job_sets_terminal_status(
+    tmp_path: Path,
+    terminal_status: JobStatus,
+) -> None:
+    db_path = tmp_path / "state.db"
+
+    run(bootstrap_database(db_path))
+    run(insert_event_row(db_path, event_id="event-1"))
+    job_id = run(
+        insert_job_row(
+            db_path,
+            event_id="event-1",
+            next_run_at="2026-03-11T00:00:00Z",
+            status=JobStatus.processing,
+        )
+    )
+
+    async def scenario() -> tuple[bool, dict[str, object] | None]:
+        from dmguard.db import get_connection
+        from dmguard.repo_jobs import get_job
+        from dmguard.scheduler import complete_job
+
+        async with get_connection(db_path) as connection:
+            await connection.execute(
+                """
+                UPDATE jobs
+                SET updated_at = '2000-01-01T00:00:00Z'
+                WHERE job_id = ?
+                """,
+                (job_id,),
+            )
+            await connection.commit()
+
+        async with get_connection(db_path) as connection:
+            completed = await complete_job(connection, job_id, terminal_status)
+            await connection.commit()
+            job = await get_job(connection, job_id)
+
+        return completed, job
+
+    completed, job = run(scenario())
+
+    assert completed is True
+    assert job is not None
+    assert job["status"] == terminal_status.value
+    assert job["updated_at"] != "2000-01-01T00:00:00Z"
+
+
+def test_complete_job_rejects_non_terminal_status(tmp_path: Path) -> None:
+    db_path = tmp_path / "state.db"
+
+    run(bootstrap_database(db_path))
+    run(insert_event_row(db_path, event_id="event-1"))
+    job_id = run(
+        insert_job_row(
+            db_path,
+            event_id="event-1",
+            next_run_at="2026-03-11T00:00:00Z",
+            status=JobStatus.processing,
+        )
+    )
+
+    async def scenario() -> None:
+        from dmguard.db import get_connection
+        from dmguard.scheduler import complete_job
+
+        async with get_connection(db_path) as connection:
+            await complete_job(connection, job_id, JobStatus.processing)
+
+    with pytest.raises(ValueError, match="terminal"):
+        run(scenario())
 
 
 @pytest.mark.parametrize(
