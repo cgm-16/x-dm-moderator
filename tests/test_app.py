@@ -332,6 +332,72 @@ def test_webhook_post_rejects_invalid_json_and_persists_request(tmp_path: Path) 
     assert rejected_rows == [("/webhooks/x", "invalid_json")]
 
 
+def test_webhook_post_rejects_invalid_utf8_json_and_persists_request(
+    tmp_path: Path,
+) -> None:
+    consumer_secret = "consumer-secret"
+    client, db_path = build_webhook_client(tmp_path, consumer_secret=consumer_secret)
+    raw_body = b"\x80"
+
+    response = client.post(
+        "/webhooks/x",
+        content=raw_body,
+        headers={
+            "x-twitter-webhooks-signature": build_signature(raw_body, consumer_secret)
+        },
+    )
+
+    rejected_rows = run(
+        fetch_all_rows(
+            db_path,
+            "SELECT path, reason FROM rejected_requests ORDER BY id ASC",
+        )
+    )
+
+    assert response.status_code == 400
+    assert rejected_rows == [("/webhooks/x", "invalid_json")]
+
+
+def test_webhook_post_bootstraps_schema_before_first_write(tmp_path: Path) -> None:
+    from dmguard.app import create_app
+
+    consumer_secret = "consumer-secret"
+    db_path = tmp_path / "state.db"
+    client = TestClient(
+        create_app(
+            build_config(),
+            StubSecretStore(consumer_secret),
+            db_path=db_path,
+        )
+    )
+    payload = {
+        "events": [
+            {
+                "event_type": "MessageCreate",
+                "id": "bootstrap-event-1",
+                "sender_id": "sender-1",
+            }
+        ]
+    }
+    raw_body = json.dumps(payload).encode("utf-8")
+
+    response = client.post(
+        "/webhooks/x",
+        content=raw_body,
+        headers={
+            "x-twitter-webhooks-signature": build_signature(raw_body, consumer_secret)
+        },
+    )
+
+    assert response.status_code == 200
+    assert run(fetch_all_rows(db_path, "SELECT event_id FROM webhook_events")) == [
+        ("bootstrap-event-1",)
+    ]
+    assert run(fetch_all_rows(db_path, "SELECT event_id FROM jobs")) == [
+        ("bootstrap-event-1",)
+    ]
+
+
 def test_webhook_post_enqueues_legacy_message_create_event(tmp_path: Path) -> None:
     consumer_secret = "consumer-secret"
     client, db_path = build_webhook_client(tmp_path, consumer_secret=consumer_secret)
