@@ -132,9 +132,9 @@ Project: X DM Image Safety Filter Prototype (v0.1)
 - [x] `jobs.attempt` is current-stage attempt counter
 - [x] `allowed_senders` fields = `sender_id, created_at, source_event_id`
 - [x] Implement schema bootstrap
-- [ ] Implement repository layer
+- [x] Implement repository layer
 - [x] Implement explicit indexes
-- [ ] Add tests for schema and repository behavior
+- [x] Add tests for schema and repository behavior
 
 ---
 
@@ -298,10 +298,10 @@ Project: X DM Image Safety Filter Prototype (v0.1)
 - [x] Setup writes append-only `setup.log`
 - [x] `setup.log` always redacts secrets
 - [ ] Implement setup state machine
-- [ ] Implement stage invalidation
-- [ ] Implement verbose output
+- [x] Implement stage invalidation
+- [x] Implement verbose output
 - [x] Implement setup log writer
-- [ ] Add setup-state tests
+- [x] Add setup-state tests
 
 ---
 

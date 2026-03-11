@@ -16,13 +16,13 @@ GitHub repo: https://github.com/cgm-16/x-dm-moderator
 - [x] #1 Package structure + path policy — deps: _none_
 - [x] #2 Config loader (Pydantic v2) — deps: #1
 - [x] #3 Logging bootstrap — deps: #1
-- [ ] #4 FastAPI app skeleton — deps: #1, #2, #3
+- [x] #4 FastAPI app skeleton — deps: #1, #2, #3
 
 ## Milestone 2 — Database
 
 - [x] #5 DB connection management — deps: #1
 - [x] #6 Schema DDL + indexes — deps: #5
-- [ ] #7 Repository layer — deps: #6
+- [x] #7 Repository layer — deps: #6
 
 ## Milestone 3 — Job State Machine
 
@@ -82,7 +82,7 @@ GitHub repo: https://github.com/cgm-16/x-dm-moderator
 ## Milestone 12 — Setup Orchestration
 
 - [x] #36 Setup state machine + setup_state.json — deps: #1
-- [ ] #37 Stage invalidation + verbose output — deps: #36
+- [x] #37 Stage invalidation + verbose output — deps: #36
 - [x] #38 Setup.log writer + secret redaction — deps: #36
 
 ## Milestone 13 — Setup Stages + Admin CLI
