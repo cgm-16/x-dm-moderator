@@ -323,13 +323,14 @@ def test_repo_senders_insert_and_read_tables(tmp_path: Path) -> None:
                 connection,
                 sender_id="sender-3",
                 next_retry_at="2026-03-12T00:00:00Z",
+                first_failed_at="2026-03-11T00:00:00Z",
+                last_failed_at="2026-03-11T00:00:00Z",
             )
             await upsert_block_failed_sender(
                 connection,
                 sender_id="sender-3",
                 next_retry_at="2026-03-13T00:00:00Z",
                 fail_count=2,
-                first_failed_at="2026-03-11T00:00:00Z",
                 last_failed_at="2026-03-11T01:00:00Z",
             )
             await connection.commit()
