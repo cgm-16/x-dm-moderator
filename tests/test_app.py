@@ -1,10 +1,8 @@
 from fastapi import Request
 from fastapi.testclient import TestClient
 
+from dmguard.app import APP_VERSION, MAX_REQUEST_BODY_BYTES
 from dmguard.config import AppConfig
-
-
-MAX_REQUEST_BODY_BYTES = 1_048_576
 
 
 def build_config(*, debug: bool = False) -> AppConfig:
@@ -43,7 +41,7 @@ def test_version_endpoint_returns_stub_version() -> None:
     response = client.get("/version")
 
     assert response.status_code == 200
-    assert response.json() == {"version": "0.1.0"}
+    assert response.json() == {"version": APP_VERSION}
 
 
 def test_non_debug_app_hides_docs_and_openapi() -> None:
