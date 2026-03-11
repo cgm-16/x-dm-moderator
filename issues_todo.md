@@ -71,7 +71,7 @@ GitHub repo: https://github.com/cgm-16/x-dm-moderator
 ## Milestone 10 — Audit + Pruning
 
 - [ ] #31 Audit + job error recording — deps: #7, #29
-- [ ] #32 Prune command — deps: #7
+- [x] #32 Prune command — deps: #7
 - [ ] #33 Daily prune trigger — deps: #32
 
 ## Milestone 11 — Traefik + Services
