@@ -90,7 +90,7 @@ Project: X DM Image Safety Filter Prototype (v0.1)
 - [x] Implement `GET /webhooks/x` for CRC
 - [ ] Implement `POST /webhooks/x` for webhook deliveries
 - [ ] Implement `GET /health`
-- [ ] Implement `GET /version`
+- [x] Implement `GET /version`
 - [ ] Implement optional local-only `/webhooks/test` in debug mode
 - [x] Disable FastAPI docs/OpenAPI unless debug
 - [x] Keep public app surface minimal
@@ -168,7 +168,7 @@ Project: X DM Image Safety Filter Prototype (v0.1)
 - [x] `/version` includes app + dependency versions
 - [ ] Implement stale-processing recovery
 - [ ] Implement `/health` aggregation
-- [ ] Implement `/version`
+- [x] Implement `/version`
 - [ ] Add startup recovery tests
 
 ---
