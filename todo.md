@@ -181,7 +181,7 @@ Project: X DM Image Safety Filter Prototype (v0.1)
 - [x] Token expiry metadata stored in SQLite
 - [x] Refresh failure marks system misconfigured
 - [x] Implement secret loader
-- [ ] Implement X API client
+- [x] Implement X API client
 - [ ] Implement DM lookup DTO parsing
 - [ ] Implement proactive refresh
 - [ ] Add tests for request construction and parsing
