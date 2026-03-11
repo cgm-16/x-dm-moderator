@@ -219,11 +219,11 @@ Project: X DM Image Safety Filter Prototype (v0.1)
 - [x] `--force-unsafe` returns 0.99
 - [x] `--force-unsafe` video metadata uses trigger frame/time
 - [x] Classifier stderr is captured and written to `classifier.log`
-- [ ] Implement subprocess contract
-- [ ] Implement fake classifier mode for early tests
+- [x] Implement subprocess contract
+- [x] Implement fake classifier mode for early tests
 - [ ] Integrate real ShieldGemma inference
 - [ ] Implement selftest CLI
-- [ ] Add classifier contract tests
+- [x] Add classifier contract tests
 
 ---
 
