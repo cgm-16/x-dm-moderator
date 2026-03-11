@@ -20,7 +20,7 @@ GitHub repo: https://github.com/cgm-16/x-dm-moderator
 
 ## Milestone 2 — Database
 
-- [ ] #5 DB connection management — deps: #1
+- [x] #5 DB connection management — deps: #1
 - [ ] #6 Schema DDL + indexes — deps: #5
 - [ ] #7 Repository layer — deps: #6
 
