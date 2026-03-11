@@ -16,7 +16,7 @@ GitHub repo: https://github.com/cgm-16/x-dm-moderator
 - [x] #1 Package structure + path policy — deps: _none_
 - [x] #2 Config loader (Pydantic v2) — deps: #1
 - [x] #3 Logging bootstrap — deps: #1
-- [ ] #4 FastAPI app skeleton — deps: #1, #2, #3
+- [x] #4 FastAPI app skeleton — deps: #1, #2, #3
 
 ## Milestone 2 — Database
 
