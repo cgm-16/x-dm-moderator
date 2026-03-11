@@ -93,13 +93,20 @@ def load_app_version() -> str:
         return version
 
 
+def _dep_version(pkg: str) -> str:
+    try:
+        return metadata.version(pkg)
+    except metadata.PackageNotFoundError:
+        return "unknown"
+
+
 def build_version_info() -> dict[str, str]:
     return {
         "version": load_app_version(),
         "python": platform.python_version(),
-        "fastapi": metadata.version("fastapi"),
-        "aiosqlite": metadata.version("aiosqlite"),
-        "httpx": metadata.version("httpx"),
+        "fastapi": _dep_version("fastapi"),
+        "aiosqlite": _dep_version("aiosqlite"),
+        "httpx": _dep_version("httpx"),
     }
 
 
