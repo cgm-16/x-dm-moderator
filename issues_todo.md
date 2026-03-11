@@ -47,7 +47,7 @@ GitHub repo: https://github.com/cgm-16/x-dm-moderator
 ## Milestone 6 — X API Client
 
 - [x] #19 Secrets loader interface — deps: #1
-- [ ] #20 X HTTP client — deps: #19
+- [x] #20 X HTTP client — deps: #19
 - [ ] #21 DM lookup client + DTOs — deps: #20
 
 ## Milestone 7 — Media Pipeline
