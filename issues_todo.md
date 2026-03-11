@@ -58,7 +58,7 @@ GitHub repo: https://github.com/cgm-16/x-dm-moderator
 
 ## Milestone 8 — Classifier
 
-- [ ] #25 Classifier subprocess contract + fake entrypoint — deps: #1
+- [x] #25 Classifier subprocess contract + fake entrypoint — deps: #1
 - [ ] #26 Subprocess runner + timeout — deps: #25
 - [ ] #27 Selftest CLI — deps: #26
 
