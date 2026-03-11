@@ -22,7 +22,7 @@ class SetupState(BaseModel):
     updated_at: str
 
 
-_SETUP_STAGE_ORDER = (
+SETUP_STAGE_ORDER = (
     "preflight",
     "local_config",
     "x_auth",
@@ -34,9 +34,7 @@ _SETUP_STAGE_ORDER = (
     "warmup",
     "app_service",
 )
-_STAGE_INDEX = {
-    stage_name: index for index, stage_name in enumerate(_SETUP_STAGE_ORDER)
-}
+_STAGE_INDEX = {stage_name: index for index, stage_name in enumerate(SETUP_STAGE_ORDER)}
 _ARG_EARLIEST_STAGE = {
     "debug": "preflight",
     "log_level": "local_config",
@@ -147,13 +145,13 @@ def _invalidated_stage_names(
     return [
         stage_name
         for stage_name in _ordered_stage_names(stages)
-        if _STAGE_INDEX.get(stage_name, len(_SETUP_STAGE_ORDER)) >= earliest_index
+        if _STAGE_INDEX.get(stage_name, len(SETUP_STAGE_ORDER)) >= earliest_index
     ]
 
 
 def _ordered_stage_names(stages: dict[str, StageStatus]) -> list[str]:
     ordered_stage_names = [
-        stage_name for stage_name in _SETUP_STAGE_ORDER if stage_name in stages
+        stage_name for stage_name in SETUP_STAGE_ORDER if stage_name in stages
     ]
     ordered_stage_names.extend(
         stage_name for stage_name in stages if stage_name not in _STAGE_INDEX
@@ -162,6 +160,7 @@ def _ordered_stage_names(stages: dict[str, StageStatus]) -> list[str]:
 
 
 __all__ = [
+    "SETUP_STAGE_ORDER",
     "SetupState",
     "StageStatus",
     "compute_args_hash",

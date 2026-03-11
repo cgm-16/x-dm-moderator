@@ -326,6 +326,8 @@ Project: X DM Image Safety Filter Prototype (v0.1)
 - [x] `config.yaml` is installer-authored, runtime-read, non-secret config
 - [x] Public HTTPS reachability is checked before webhook registration
 - [x] Unsupported environment => setup fails
+- [x] Implement setup subcommands (`setup`, `reset --force`, `warmup`, `status`, `status --full`)
+- [x] Add setup CLI tests
 - [ ] Implement preflight stage
 - [ ] Implement local config stage
 - [ ] Implement X auth stage

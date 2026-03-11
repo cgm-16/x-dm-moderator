@@ -87,7 +87,7 @@ GitHub repo: https://github.com/cgm-16/x-dm-moderator
 
 ## Milestone 13 — Setup Stages + Admin CLI
 
-- [ ] #39 Setup subcommands — deps: #36, #37, #38
+- [x] #39 Setup subcommands — deps: #36, #37, #38
 - [ ] #40 Admin CLI — deps: #7, #27, #30
 
 ## Milestone 14 — End-to-End
