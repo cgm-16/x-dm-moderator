@@ -1,9 +1,18 @@
+from collections.abc import Iterator
 from dataclasses import dataclass
+from typing import TypeVar
 
 import aiosqlite
 
-from dmguard.job_machine import JobStatus
+from dmguard.job_machine import JobStatus, is_terminal
 from dmguard.repo_common import fetch_all_dicts
+
+_SQLITE_MAX_VARIABLES = 32766
+_TERMINAL_JOB_STATUSES = tuple(
+    status.value for status in JobStatus if is_terminal(status)
+)
+
+T = TypeVar("T")
 
 
 @dataclass(frozen=True)
@@ -20,16 +29,17 @@ async def prune_old_data(
     retention_days: int = 30,
 ) -> PruneResult:
     cutoff_modifier = f"-{retention_days} days"
+    status_placeholders = ", ".join("?" for _ in _TERMINAL_JOB_STATUSES)
     prunable_jobs = await fetch_all_dicts(
         connection,
-        """
+        f"""
         SELECT job_id, event_id
         FROM jobs
-        WHERE status IN (?, ?)
+        WHERE status IN ({status_placeholders})
           AND datetime(updated_at) <= datetime('now', ?)
         ORDER BY job_id ASC
         """,
-        (JobStatus.done.value, JobStatus.error.value, cutoff_modifier),
+        (*_TERMINAL_JOB_STATUSES, cutoff_modifier),
     )
     job_ids = [int(job["job_id"]) for job in prunable_jobs]
     event_ids = [str(job["event_id"]) for job in prunable_jobs]
@@ -83,16 +93,20 @@ async def _delete_by_ids(
     if not values:
         return 0
 
-    placeholders = ", ".join("?" for _ in values)
-    cursor = await connection.execute(
-        f"DELETE FROM {table} WHERE {column} IN ({placeholders})",
-        values,
-    )
+    deleted = 0
+    for batch in _iter_batches(values, batch_size=_SQLITE_MAX_VARIABLES):
+        placeholders = ", ".join("?" for _ in batch)
+        cursor = await connection.execute(
+            f"DELETE FROM {table} WHERE {column} IN ({placeholders})",
+            batch,
+        )
 
-    try:
-        return cursor.rowcount
-    finally:
-        await cursor.close()
+        try:
+            deleted += cursor.rowcount
+        finally:
+            await cursor.close()
+
+    return deleted
 
 
 async def _delete_pruned_webhook_events(
@@ -104,25 +118,29 @@ async def _delete_pruned_webhook_events(
     if not event_ids:
         return 0
 
-    placeholders = ", ".join("?" for _ in event_ids)
-    cursor = await connection.execute(
-        f"""
-        DELETE FROM webhook_events
-        WHERE event_id IN ({placeholders})
-          AND datetime(received_at) <= datetime('now', ?)
-          AND NOT EXISTS (
-            SELECT 1
-            FROM jobs
-            WHERE jobs.event_id = webhook_events.event_id
-          )
-        """,
-        [*event_ids, cutoff_modifier],
-    )
+    deleted = 0
+    for batch in _iter_batches(event_ids, batch_size=_SQLITE_MAX_VARIABLES - 1):
+        placeholders = ", ".join("?" for _ in batch)
+        cursor = await connection.execute(
+            f"""
+            DELETE FROM webhook_events
+            WHERE event_id IN ({placeholders})
+              AND datetime(received_at) <= datetime('now', ?)
+              AND NOT EXISTS (
+                SELECT 1
+                FROM jobs
+                WHERE jobs.event_id = webhook_events.event_id
+              )
+            """,
+            [*batch, cutoff_modifier],
+        )
 
-    try:
-        return cursor.rowcount
-    finally:
-        await cursor.close()
+        try:
+            deleted += cursor.rowcount
+        finally:
+            await cursor.close()
+
+    return deleted
 
 
 async def _delete_older_than(
@@ -144,6 +162,11 @@ async def _delete_older_than(
         return cursor.rowcount
     finally:
         await cursor.close()
+
+
+def _iter_batches(values: list[T], *, batch_size: int) -> Iterator[list[T]]:
+    for start in range(0, len(values), batch_size):
+        yield values[start : start + batch_size]
 
 
 __all__ = ["PruneResult", "prune_old_data"]
