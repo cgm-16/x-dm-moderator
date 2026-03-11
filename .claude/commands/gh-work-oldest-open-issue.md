@@ -2,7 +2,7 @@
 
 ## Overview
 
-Use this skill when no issue number is provided and backlog work should be taken in issue age order. Read the repository instructions first, select the oldest open issue by `createdAt`, create a new worktree from an updated `main`, execute the issue with the repository's debugging and testing rules, and update `todo.md` only for work that is truly done.
+Use this skill when no issue number is provided and backlog work should be taken in issue age order. Read the repository instructions first, select the oldest dependency-ready open issue by `createdAt`, create a new worktree from an updated `main`, execute the issue with the repository's debugging and testing rules, and update `todo.md` only for work that is truly done.
 
 ## Workflow
 
@@ -10,12 +10,13 @@ Use this skill when no issue number is provided and backlog work should be taken
    - Read `CLAUDE.md`.
    - Check auto-memory (`~/.claude/projects/*/memory/`) for relevant past context.
    - Read `todo.md`.
+   - Read `issues_todo.md`.
    - Inspect `git status --short`, `git branch --show-current`, and `git worktree list`.
    - Publish an executable plan where every step includes action intent, exact command or action, and a done-check.
 
 2. Select the issue.
    - If Ori already supplied an issue number or URL, use it instead of selecting one.
-   - Otherwise list open issues and choose the earliest by `createdAt`, not by issue number.
+   - Otherwise list open issues and choose the earliest by `createdAt` that has all dependencies resolved.
    - Example command:
 
    ```bash
@@ -23,6 +24,7 @@ Use this skill when no issue number is provided and backlog work should be taken
    ```
 
    - Open the selected issue and read the full body before changing code.
+   - If a `gh` command fails, stop and ask Ori before retrying.
 
 3. Prepare a fresh worktree.
    - Sync `main` with fetch plus fast-forward-only. If sync fails, stop and ask Ori.
@@ -68,7 +70,7 @@ Use this skill when no issue number is provided and backlog work should be taken
 
 ## Done Check
 
-- The selected issue is the earliest open issue by `createdAt`.
+- The selected issue is the earliest dependency-ready open issue by `createdAt`.
 - The work happens in a new worktree on a feature branch based on updated `main`.
 - The implementation matches the issue scope and has test or verification evidence.
 - `todo.md` matches what was actually completed and verified.
