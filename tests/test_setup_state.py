@@ -222,6 +222,21 @@ def test_describe_verbose_stage_changes_mentions_changed_arg_and_skipped_stage()
     )
 
 
+def test_invalidate_changed_stages_handles_removed_arg() -> None:
+    from dmguard.setup_state import invalidate_changed_stages
+
+    state = make_setup_state()
+    args_without_acme_email = {
+        k: v for k, v in state.effective_args.items() if k != "acme_email"
+    }
+
+    invalidated = invalidate_changed_stages(state, args_without_acme_email)
+
+    assert "tls" in invalidated
+    assert "preflight" not in invalidated
+    assert "acme_email" not in state.effective_args
+
+
 def test_invalidate_changed_stages_uses_preflight_for_unknown_arg() -> None:
     from dmguard.setup_state import invalidate_changed_stages
 

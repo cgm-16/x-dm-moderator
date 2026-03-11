@@ -17,7 +17,7 @@ class StageStatus(BaseModel):
 
 class SetupState(BaseModel):
     last_command: str
-    effective_args: dict[str, object]
+    effective_args: dict[str, str | int | float | bool | None]
     stages: dict[str, StageStatus]
     updated_at: str
 
@@ -75,15 +75,15 @@ def save_setup_state(state: SetupState, path: Path) -> None:
     os.replace(temp_path, path)
 
 
-def compute_args_hash(args: dict[str, object]) -> str:
+def compute_args_hash(args: dict[str, str | int | float | bool | None]) -> str:
     encoded_args = json.dumps(args, sort_keys=True, separators=(",", ":"))
     return hashlib.sha256(encoded_args.encode("utf-8")).hexdigest()
 
 
 def invalidate_changed_stages(
-    state: SetupState, new_args: dict[str, object]
+    state: SetupState, new_args: dict[str, str | int | float | bool | None]
 ) -> list[str]:
-    if compute_args_hash(state.effective_args) == compute_args_hash(new_args):
+    if state.effective_args == new_args:
         return []
 
     changed_args = _changed_arg_names(state.effective_args, new_args)
@@ -102,7 +102,7 @@ def invalidate_changed_stages(
 
 
 def describe_verbose_stage_changes(
-    state: SetupState, new_args: dict[str, object]
+    state: SetupState, new_args: dict[str, str | int | float | bool | None]
 ) -> list[str]:
     changed_args = _changed_arg_names(state.effective_args, new_args)
     invalidated_stages = set(_invalidated_stage_names(state.stages, changed_args))
@@ -122,7 +122,8 @@ def describe_verbose_stage_changes(
 
 
 def _changed_arg_names(
-    previous_args: dict[str, object], new_args: dict[str, object]
+    previous_args: dict[str, str | int | float | bool | None],
+    new_args: dict[str, str | int | float | bool | None],
 ) -> list[str]:
     return sorted(
         arg_name
