@@ -1,10 +1,10 @@
 import re
 from pathlib import Path
 
+import dmguard.setup_logger as setup_logger
+
 
 def test_setup_logger_appends_timestamped_lines(tmp_path: Path) -> None:
-    import dmguard.setup_logger as setup_logger
-
     log_path = tmp_path / "setup.log"
     logger = setup_logger.SetupLogger(log_path)
 
@@ -23,8 +23,6 @@ def test_setup_logger_appends_timestamped_lines(tmp_path: Path) -> None:
 
 
 def test_setup_logger_redacts_known_secret_values(tmp_path: Path) -> None:
-    import dmguard.setup_logger as setup_logger
-
     log_path = tmp_path / "setup.log"
     logger = setup_logger.SetupLogger(log_path)
     message = (
@@ -42,9 +40,20 @@ def test_setup_logger_redacts_known_secret_values(tmp_path: Path) -> None:
     assert "hf_token: [REDACTED]" in redacted
 
 
-def test_setup_logger_preserves_non_secret_content_verbatim(tmp_path: Path) -> None:
-    import dmguard.setup_logger as setup_logger
+def test_setup_logger_redacts_bearer_token_with_trailing_fields(tmp_path: Path) -> None:
+    log_path = tmp_path / "setup.log"
+    logger = setup_logger.SetupLogger(log_path)
+    message = "authorization: Bearer eyJhbGciOiJSUzI1NiJ9.payload.sig stage=preflight"
 
+    redacted = logger.redact(message)
+
+    assert "Bearer" not in redacted
+    assert "eyJhbGciOiJSUzI1NiJ9.payload.sig" not in redacted
+    assert "authorization: [REDACTED]" in redacted
+    assert "stage=preflight" in redacted
+
+
+def test_setup_logger_preserves_non_secret_content_verbatim(tmp_path: Path) -> None:
     log_path = tmp_path / "setup.log"
     logger = setup_logger.SetupLogger(log_path)
     message = (

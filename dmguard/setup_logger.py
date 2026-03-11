@@ -31,7 +31,7 @@ SECRET_LABEL_PATTERN = "|".join(
 )
 SECRET_ASSIGNMENT_PATTERN = re.compile(
     rf'(?P<label>["\']?(?:{SECRET_LABEL_PATTERN})["\']?\s*(?:=|:)\s*)'
-    rf'(?P<quote>["\']?)(?P<value>[^\s,"\']+)(?P=quote)',
+    rf'(?P<quote>["\']?)(?P<value>[^\s,"\']+(?:\s+(?!\w+\s*(?:=|:))[^\s,"\']+)*)(?P=quote)',
     re.IGNORECASE,
 )
 
