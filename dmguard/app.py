@@ -21,6 +21,7 @@ from dmguard.paths import DB_PATH
 from dmguard.repo_events import insert_event
 from dmguard.repo_jobs import insert_job
 from dmguard.repo_rejected import insert_rejected_request
+from dmguard.schema import bootstrap_schema
 from dmguard.secrets import FileSecretStore, SecretStore
 from dmguard.webhook_auth import verify_x_signature
 
@@ -180,6 +181,11 @@ async def _persist_rejected_request(
         await connection.commit()
 
 
+async def _ensure_schema(db_path: Path) -> None:
+    async with get_connection(db_path) as connection:
+        await bootstrap_schema(connection)
+
+
 def _legacy_message_create_events(
     payload: object,
 ) -> list[tuple[str, str | None, dict[str, object]]]:
@@ -316,6 +322,7 @@ def create_app(
     @app.post(WEBHOOK_PATH)
     async def webhook(request: Request) -> Response:
         raw_body = await request.body()
+        await _ensure_schema(app_db_path)
         consumer_secret = app_secret_store.get("x_consumer_secret")
         signature_header = request.headers.get("x-twitter-webhooks-signature", "")
 
@@ -331,7 +338,7 @@ def create_app(
 
         try:
             payload = json.loads(raw_body)
-        except json.JSONDecodeError:
+        except (json.JSONDecodeError, UnicodeDecodeError):
             await _persist_rejected_request(
                 app_db_path,
                 path=WEBHOOK_PATH,
@@ -367,6 +374,7 @@ async def _persist_oversized_webhook_request(db_path: Path, scope: Scope) -> Non
     if path != WEBHOOK_PATH:
         return
 
+    await _ensure_schema(db_path)
     await _persist_rejected_request(
         db_path,
         path=WEBHOOK_PATH,
