@@ -182,9 +182,9 @@ Project: X DM Image Safety Filter Prototype (v0.1)
 - [x] Refresh failure marks system misconfigured
 - [x] Implement secret loader
 - [x] Implement X API client
-- [ ] Implement DM lookup DTO parsing
+- [x] Implement DM lookup DTO parsing
 - [ ] Implement proactive refresh
-- [ ] Add tests for request construction and parsing
+- [x] Add tests for request construction and parsing
 
 ---
 
