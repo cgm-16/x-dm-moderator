@@ -27,7 +27,7 @@ GitHub repo: https://github.com/cgm-16/x-dm-moderator
 ## Milestone 3 — Job State Machine
 
 - [x] #8 Status/stage enums + transition logic (pure) — deps: _none_
-- [ ] #9 Dequeue + claim transaction — deps: #7, #8
+- [x] #9 Dequeue + claim transaction — deps: #7, #8
 - [x] #10 Retry scheduling — deps: #7, #8
 
 ## Milestone 4 — FastAPI Lifecycle
