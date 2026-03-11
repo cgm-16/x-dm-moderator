@@ -87,7 +87,7 @@ Project: X DM Image Safety Filter Prototype (v0.1)
 
 ## 5. Runtime API surface
 
-- [ ] Implement `GET /webhooks/x` for CRC
+- [x] Implement `GET /webhooks/x` for CRC
 - [ ] Implement `POST /webhooks/x` for webhook deliveries
 - [ ] Implement `GET /health`
 - [ ] Implement `GET /version`
