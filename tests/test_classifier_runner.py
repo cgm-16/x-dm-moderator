@@ -6,16 +6,7 @@ import time
 
 import pytest
 
-
-def clear_logger(name: str) -> None:
-    logger = logging.getLogger(name)
-
-    for handler in list(logger.handlers):
-        logger.removeHandler(handler)
-        handler.close()
-
-    logger.setLevel(logging.NOTSET)
-    logger.propagate = True
+from tests.conftest import clear_logger
 
 
 @pytest.fixture(autouse=True)

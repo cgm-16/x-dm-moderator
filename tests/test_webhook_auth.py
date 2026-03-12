@@ -1,16 +1,4 @@
-import base64
-import hashlib
-import hmac
-
-
-def build_signature(raw_body: bytes, consumer_secret: str) -> str:
-    digest = hmac.new(
-        consumer_secret.encode("utf-8"),
-        raw_body,
-        hashlib.sha256,
-    ).digest()
-    encoded_digest = base64.b64encode(digest).decode("ascii")
-    return f"sha256={encoded_digest}"
+from tests.conftest import build_signature
 
 
 def test_verify_x_signature_returns_true_for_valid_signature() -> None:

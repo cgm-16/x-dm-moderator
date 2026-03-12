@@ -1,19 +1,8 @@
-import asyncio
 from pathlib import Path
 
 import pytest
 
-
-def run(coroutine):
-    return asyncio.run(coroutine)
-
-
-async def bootstrap_database(db_path: Path) -> None:
-    from dmguard.db import get_connection
-    from dmguard.schema import bootstrap_schema
-
-    async with get_connection(db_path) as connection:
-        await bootstrap_schema(connection)
+from tests.conftest import bootstrap_database, run
 
 
 async def count_rows(db_path: Path, table: str) -> int:

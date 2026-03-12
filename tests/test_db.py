@@ -3,7 +3,7 @@ from pathlib import Path
 
 import pytest
 
-from tests.conftest import run
+from tests.conftest import bootstrap_database, run
 
 
 EXPECTED_TABLES = {
@@ -59,14 +59,6 @@ async def fetch_pragma_value(db_path: Path, pragma_name: str):
     async with get_connection(db_path) as connection:
         cursor = await connection.execute(f"PRAGMA {pragma_name}")
         return await cursor.fetchone()
-
-
-async def bootstrap_schema(db_path: Path) -> None:
-    from dmguard.db import get_connection
-    from dmguard.schema import bootstrap_schema
-
-    async with get_connection(db_path) as connection:
-        await bootstrap_schema(connection)
 
 
 async def bootstrap_schema_twice(db_path: Path) -> set[str]:
@@ -194,7 +186,7 @@ def test_bootstrap_schema_is_idempotent(tmp_path: Path) -> None:
 def test_bootstrap_schema_creates_all_expected_indexes(tmp_path: Path) -> None:
     db_path = tmp_path / "state.db"
 
-    run(bootstrap_schema(db_path))
+    run(bootstrap_database(db_path))
 
     for table_name, expected_indexes in EXPECTED_INDEX_COLUMNS.items():
         index_columns = run(fetch_index_columns(db_path, table_name))
@@ -206,7 +198,7 @@ def test_bootstrap_schema_creates_all_expected_indexes(tmp_path: Path) -> None:
 def test_bootstrap_schema_enforces_job_event_foreign_key(tmp_path: Path) -> None:
     db_path = tmp_path / "state.db"
 
-    run(bootstrap_schema(db_path))
+    run(bootstrap_database(db_path))
 
     with pytest.raises(sqlite3.IntegrityError):
         run(insert_job_without_matching_event(db_path))
@@ -215,7 +207,7 @@ def test_bootstrap_schema_enforces_job_event_foreign_key(tmp_path: Path) -> None
 def test_bootstrap_schema_enforces_job_status_check(tmp_path: Path) -> None:
     db_path = tmp_path / "state.db"
 
-    run(bootstrap_schema(db_path))
+    run(bootstrap_database(db_path))
 
     with pytest.raises(sqlite3.IntegrityError):
         run(insert_job_with_invalid_status(db_path))
