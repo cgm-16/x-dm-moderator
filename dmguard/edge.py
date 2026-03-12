@@ -4,7 +4,6 @@ import os
 
 import yaml
 
-from dmguard.config import AppConfig
 from dmguard.paths import LOGS_DIR, PROGRAM_DATA_DIR, PROGRAM_FILES_DIR
 
 
@@ -21,6 +20,13 @@ class InvalidYamlError(ValueError):
 
 
 def write_routes_atomically(content: str, target: Path) -> None:
+    try:
+        parsed = yaml.safe_load(content)
+        if parsed is not None and not isinstance(parsed, dict):
+            raise InvalidYamlError("Routes YAML must parse to a mapping")
+    except yaml.YAMLError as exc:
+        raise InvalidYamlError("Routes YAML is not valid YAML") from exc
+
     with NamedTemporaryFile(
         mode="w",
         encoding="utf-8",
@@ -32,22 +38,10 @@ def write_routes_atomically(content: str, target: Path) -> None:
         temp_file.write(content)
         temp_path = Path(temp_file.name)
 
-    try:
-        parsed = yaml.safe_load(content)
-        if parsed is not None and not isinstance(parsed, dict):
-            raise InvalidYamlError("Routes YAML must parse to a mapping")
-    except yaml.YAMLError as exc:
-        _delete_temp_file(temp_path)
-        raise InvalidYamlError("Routes YAML is not valid YAML") from exc
-    except InvalidYamlError:
-        _delete_temp_file(temp_path)
-        raise
-
     os.replace(temp_path, target)
 
 
-def generate_traefik_service_def(config: AppConfig) -> dict[str, str]:
-    _ = config
+def generate_traefik_service_def() -> dict[str, str]:
     return {
         "name": TRAEFIK_SERVICE_NAME,
         "displayName": "XDMModerator Traefik",
@@ -61,8 +55,7 @@ def generate_traefik_service_def(config: AppConfig) -> dict[str, str]:
     }
 
 
-def generate_dmguard_service_def(config: AppConfig) -> dict[str, str | list[str]]:
-    _ = config
+def generate_dmguard_service_def() -> dict[str, str | list[str]]:
     return {
         "name": DMGUARD_SERVICE_NAME,
         "displayName": "XDMModerator",
@@ -74,13 +67,6 @@ def generate_dmguard_service_def(config: AppConfig) -> dict[str, str | list[str]
         "stderr": str(LOGS_DIR / "dmguard-service.err.log"),
         "deps": [TRAEFIK_SERVICE_NAME],
     }
-
-
-def _delete_temp_file(path: Path) -> None:
-    try:
-        path.unlink()
-    except FileNotFoundError:
-        pass
 
 
 __all__ = [
