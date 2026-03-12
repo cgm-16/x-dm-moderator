@@ -48,21 +48,25 @@ def extract_frames(video_path: Path, event_id: str) -> list[FrameInfo]:
 
 
 def _probe_duration(video_path: Path) -> float:
-    result = subprocess.run(
-        [
-            "ffprobe",
-            "-v",
-            "error",
-            "-show_entries",
-            "format=duration",
-            "-of",
-            "default=noprint_wrappers=1:nokey=1",
-            str(video_path),
-        ],
-        capture_output=True,
-        text=True,
-        check=False,
-    )
+    try:
+        result = subprocess.run(
+            [
+                "ffprobe",
+                "-v",
+                "error",
+                "-show_entries",
+                "format=duration",
+                "-of",
+                "default=noprint_wrappers=1:nokey=1",
+                str(video_path),
+            ],
+            capture_output=True,
+            text=True,
+            check=False,
+            timeout=30,
+        )
+    except subprocess.TimeoutExpired as error:
+        raise FrameExtractionError("ffprobe timed out") from error
 
     if result.returncode != 0:
         raise FrameExtractionError(result.stderr.strip() or "ffprobe failed")
@@ -74,22 +78,26 @@ def _probe_duration(video_path: Path) -> float:
 
 
 def _extract_frame(video_path: Path, frame_path: Path, time_sec: int) -> None:
-    result = subprocess.run(
-        [
-            "ffmpeg",
-            "-y",
-            "-ss",
-            str(time_sec),
-            "-i",
-            str(video_path),
-            "-frames:v",
-            "1",
-            str(frame_path),
-        ],
-        capture_output=True,
-        text=True,
-        check=False,
-    )
+    try:
+        result = subprocess.run(
+            [
+                "ffmpeg",
+                "-y",
+                "-ss",
+                str(time_sec),
+                "-i",
+                str(video_path),
+                "-frames:v",
+                "1",
+                str(frame_path),
+            ],
+            capture_output=True,
+            text=True,
+            check=False,
+            timeout=30,
+        )
+    except subprocess.TimeoutExpired as error:
+        raise FrameExtractionError("ffmpeg timed out") from error
 
     if result.returncode != 0:
         raise FrameExtractionError(result.stderr.strip() or "ffmpeg failed")

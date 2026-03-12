@@ -38,12 +38,23 @@ import json
 import os
 import sys
 
+# Track invocation count for FAKE_FFMPEG_FAIL_AFTER support
+counter = 0
+counter_path = os.environ.get("FAKE_FFMPEG_COUNTER")
+if counter_path:
+    p = Path(counter_path)
+    counter = int(p.read_text()) if p.exists() else 0
+    p.write_text(str(counter + 1))
+
 log_path = os.environ.get("FAKE_FFMPEG_LOG")
 if log_path:
     with open(log_path, "a", encoding="utf-8") as handle:
         handle.write(json.dumps(sys.argv[1:]) + "\\n")
 
-if os.environ.get("FAKE_FFMPEG_FAIL") == "1":
+fail_after = os.environ.get("FAKE_FFMPEG_FAIL_AFTER")
+if os.environ.get("FAKE_FFMPEG_FAIL") == "1" or (
+    fail_after is not None and counter >= int(fail_after)
+):
     sys.stderr.write("ffmpeg failed\\n")
     raise SystemExit(1)
 
@@ -234,12 +245,16 @@ def test_extract_frames_raises_when_ffmpeg_fails_and_cleans_partial_frames(
 
     bin_dir = install_fake_ffmpeg_tools(tmp_path / "bin")
     output_dir = tmp_path / "frames"
+    counter_path = tmp_path / "ffmpeg-counter"
     video_path = tmp_path / "clip.mp4"
     video_path.write_bytes(b"video")
 
+    # 3-second video: ffmpeg succeeds for frame 0, then fails for frame 1,
+    # leaving one partial frame on disk that must be cleaned up.
     monkeypatch.setenv("PATH", f"{bin_dir}:{os.environ['PATH']}")
-    monkeypatch.setenv("FAKE_FFPROBE_DURATION", "2.0")
-    monkeypatch.setenv("FAKE_FFMPEG_FAIL", "1")
+    monkeypatch.setenv("FAKE_FFPROBE_DURATION", "3.0")
+    monkeypatch.setenv("FAKE_FFMPEG_FAIL_AFTER", "1")
+    monkeypatch.setenv("FAKE_FFMPEG_COUNTER", str(counter_path))
     monkeypatch.setattr(frame_extractor, "TMP_DIR", output_dir)
 
     with pytest.raises(frame_extractor.FrameExtractionError, match="ffmpeg failed"):
