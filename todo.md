@@ -200,7 +200,7 @@ Project: X DM Image Safety Filter Prototype (v0.1)
 - [x] No image size cap in MVP
 - [x] Video/GIF cap = 25 MB
 - [x] Over-cap video/GIF => preview image fallback if available
-- [ ] Implement attachment dispatch
+- [x] Implement attachment dispatch
 - [ ] Implement authenticated media download
 - [ ] Implement temp file lifecycle
 - [ ] Implement frame extraction
