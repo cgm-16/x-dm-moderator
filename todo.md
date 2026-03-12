@@ -313,10 +313,10 @@ Project: X DM Image Safety Filter Prototype (v0.1)
 - [x] `dmguard` is also managed by Servy
 - [x] Traefik is installed/started before `dmguard`
 - [x] `dmguard` only installs after TLS + public reachability succeed
-- [ ] Generate Traefik service definition
-- [ ] Generate `dmguard` service definition
+- [x] Generate Traefik service definition
+- [x] Generate `dmguard` service definition
 - [ ] Implement service install/start/update logic
-- [ ] Add service config generation tests
+- [x] Add service config generation tests
 
 ---
 
