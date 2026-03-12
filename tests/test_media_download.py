@@ -4,11 +4,9 @@ import logging
 import httpx
 import pytest
 
+from dmguard.media_download import MAX_CAPPED_MEDIA_DOWNLOAD_BYTES
 from dmguard.x_dm import MediaItem
 from tests.conftest import StubSecretStore, clear_logger, run
-
-
-_TWENTY_FIVE_MB = 25 * 1024 * 1024
 
 
 @pytest.fixture(autouse=True)
@@ -92,7 +90,9 @@ def test_download_media_uses_highest_bitrate_variant_for_video_under_size_cap(
             assert request.url == httpx.URL(
                 "https://media.example.com/video-high.mp4?tag=1"
             )
-            return httpx.Response(200, headers={"Content-Length": str(_TWENTY_FIVE_MB)})
+            return httpx.Response(
+                200, headers={"Content-Length": str(MAX_CAPPED_MEDIA_DOWNLOAD_BYTES)}
+            )
 
         assert request.method == "GET"
         assert request.url == httpx.URL(
@@ -140,7 +140,8 @@ def test_download_media_uses_first_variant_when_bitrate_missing_under_size_cap(
         if request.method == "HEAD":
             assert request.url == httpx.URL("https://media.example.com/gif-first.mp4")
             return httpx.Response(
-                200, headers={"Content-Length": str(_TWENTY_FIVE_MB - 1)}
+                200,
+                headers={"Content-Length": str(MAX_CAPPED_MEDIA_DOWNLOAD_BYTES - 1)},
             )
 
         assert request.method == "GET"
@@ -187,7 +188,8 @@ def test_download_media_uses_preview_image_when_video_exceeds_size_cap(
         if request.method == "HEAD":
             assert request.url == httpx.URL("https://media.example.com/video-large.mp4")
             return httpx.Response(
-                200, headers={"Content-Length": str(_TWENTY_FIVE_MB + 1)}
+                200,
+                headers={"Content-Length": str(MAX_CAPPED_MEDIA_DOWNLOAD_BYTES + 1)},
             )
 
         assert request.method == "GET"
@@ -225,7 +227,9 @@ def test_download_media_raises_when_video_exceeds_size_cap_without_preview() -> 
     async def handler(request: httpx.Request) -> httpx.Response:
         requests.append((request.method, request.url))
         assert request.method == "HEAD"
-        return httpx.Response(200, headers={"Content-Length": str(_TWENTY_FIVE_MB + 1)})
+        return httpx.Response(
+            200, headers={"Content-Length": str(MAX_CAPPED_MEDIA_DOWNLOAD_BYTES + 1)}
+        )
 
     with pytest.raises(MediaTooLargeError, match="3_5"):
         run(download_item(video, transport=httpx.MockTransport(handler)))
@@ -277,6 +281,50 @@ def test_download_media_downloads_video_when_head_has_no_usable_content_length(
     assert requests == [
         ("HEAD", httpx.URL("https://media.example.com/video-unknown.mp4")),
         ("GET", httpx.URL("https://media.example.com/video-unknown.mp4")),
+    ]
+
+
+def test_download_media_downloads_video_when_head_request_fails(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    import dmguard.media_download as media_download
+
+    download_dir = tmp_path / "downloads"
+    video = MediaItem(
+        media_key="3_7",
+        type="video",
+        preview_image_url="https://media.example.com/video-preview.jpg",
+        variants=[
+            {
+                "bit_rate": 832000,
+                "content_type": "video/mp4",
+                "url": "https://media.example.com/video-unreachable.mp4",
+            }
+        ],
+    )
+    requests: list[tuple[str, httpx.URL]] = []
+
+    async def handler(request: httpx.Request) -> httpx.Response:
+        requests.append((request.method, request.url))
+
+        if request.method == "HEAD":
+            raise httpx.ConnectError("connection refused")
+
+        assert request.method == "GET"
+        assert request.url == httpx.URL(
+            "https://media.example.com/video-unreachable.mp4"
+        )
+        return httpx.Response(200, content=b"video-bytes")
+
+    monkeypatch.setattr(media_download, "TMP_DIR", download_dir)
+
+    downloaded_path = run(download_item(video, transport=httpx.MockTransport(handler)))
+
+    assert downloaded_path == download_dir / "event-1_3_7.mp4"
+    assert downloaded_path.read_bytes() == b"video-bytes"
+    assert requests == [
+        ("HEAD", httpx.URL("https://media.example.com/video-unreachable.mp4")),
+        ("GET", httpx.URL("https://media.example.com/video-unreachable.mp4")),
     ]
 
 

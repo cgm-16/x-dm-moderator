@@ -17,7 +17,7 @@ _DEFAULT_EXTENSIONS = {
 
 _LOGGER = logging.getLogger("dmguard")
 _SIZE_CAPPED_MEDIA_TYPES = {"animated_gif", "video"}
-MAX_VIDEO_DOWNLOAD_BYTES = 25 * 1024 * 1024
+MAX_CAPPED_MEDIA_DOWNLOAD_BYTES = 25 * 1024 * 1024
 
 
 class MediaTooLargeError(Exception):
@@ -54,14 +54,14 @@ async def _resolve_download_target(client: XClient, item: MediaItem) -> tuple[st
 
     content_length = await _probe_content_length(client, download_url)
 
-    if content_length is None or content_length <= MAX_VIDEO_DOWNLOAD_BYTES:
+    if content_length is None or content_length <= MAX_CAPPED_MEDIA_DOWNLOAD_BYTES:
         return item.type, download_url
 
     if item.preview_image_url:
         return "photo", item.preview_image_url
 
     raise MediaTooLargeError(
-        f"Media item {item.media_key} exceeds {MAX_VIDEO_DOWNLOAD_BYTES} bytes"
+        f"Media item {item.media_key} exceeds {MAX_CAPPED_MEDIA_DOWNLOAD_BYTES} bytes"
     )
 
 
