@@ -145,11 +145,11 @@ async def schedule_429_retry(
 async def reset_stale_jobs(
     connection: aiosqlite.Connection,
     stale_threshold_minutes: int = 30,
-) -> int:
+) -> list[dict[str, object]]:
     now = _parse_utc(_utc_now())
     stale_before = _format_utc(now - timedelta(minutes=stale_threshold_minutes))
     stale_jobs = await list_stale_processing_jobs(connection, before=stale_before)
-    reset_count = 0
+    reset_jobs: list[dict[str, object]] = []
 
     for stale_job in stale_jobs:
         updated = await update_job_status(
@@ -160,9 +160,9 @@ async def reset_stale_jobs(
             processing_started_at=None,
         )
         if updated:
-            reset_count += 1
+            reset_jobs.append(stale_job)
 
-    return reset_count
+    return reset_jobs
 
 
 __all__ = [
