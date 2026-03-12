@@ -1,22 +1,7 @@
-import asyncio
-
 import httpx
 import pytest
 
-
-class StubSecretStore:
-    def __init__(self, access_token: str) -> None:
-        self._access_token = access_token
-
-    def get(self, key: str) -> str:
-        if key != "x_access_token":
-            raise AssertionError(f"Unexpected secret key: {key}")
-
-        return self._access_token
-
-
-def run(coroutine):
-    return asyncio.run(coroutine)
+from tests.conftest import StubSecretStore, run
 
 
 async def fetch_event(
@@ -26,7 +11,9 @@ async def fetch_event(
     from dmguard.x_client import XClient
     from dmguard.x_dm import fetch_dm_event
 
-    async with XClient(StubSecretStore("access-token"), transport=transport) as client:
+    async with XClient(
+        StubSecretStore(x_access_token="access-token"), transport=transport
+    ) as client:
         return await fetch_dm_event(client, event_id)
 
 
@@ -34,7 +21,7 @@ def test_fetch_dm_event_uses_expected_endpoint_and_query_params() -> None:
     async def handler(request: httpx.Request) -> httpx.Response:
         assert request.url.path == "/2/dm_events/1234567890"
         assert request.url.params["event_fields"] == (
-            "attachments,created_at,dm_conversation_id,sender_id,text"
+            "attachments,created_at,sender_id,text"
         )
         assert request.url.params["expansions"] == "attachments.media_keys,sender_id"
         assert (
