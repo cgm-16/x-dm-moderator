@@ -1,28 +1,15 @@
-import asyncio
-
 import httpx
 import pytest
 
-
-class StubSecretStore:
-    def __init__(self, access_token: str) -> None:
-        self._access_token = access_token
-
-    def get(self, key: str) -> str:
-        if key != "x_access_token":
-            raise AssertionError(f"Unexpected secret key: {key}")
-
-        return self._access_token
-
-
-def run(coroutine):
-    return asyncio.run(coroutine)
+from tests.conftest import StubSecretStore, run
 
 
 async def perform_get(transport: httpx.MockTransport) -> str:
     from dmguard.x_client import XClient
 
-    async with XClient(StubSecretStore("access-token"), transport=transport) as client:
+    async with XClient(
+        StubSecretStore(x_access_token="access-token"), transport=transport
+    ) as client:
         response = await client.get("/2/test")
 
     return response.text
@@ -41,7 +28,7 @@ def test_x_client_sends_authorization_header() -> None:
 def test_x_client_uses_ten_second_timeout() -> None:
     from dmguard.x_client import XClient
 
-    client = XClient(StubSecretStore("access-token"))
+    client = XClient(StubSecretStore(x_access_token="access-token"))
 
     try:
         timeout = client._client.timeout
@@ -62,7 +49,7 @@ def test_x_client_raises_rate_limited_error_on_429() -> None:
 
     async def perform_request() -> None:
         async with XClient(
-            StubSecretStore("access-token"),
+            StubSecretStore(x_access_token="access-token"),
             transport=httpx.MockTransport(handler),
         ) as client:
             await client.get("/2/test")
@@ -81,7 +68,7 @@ def test_x_client_raises_api_error_on_other_non_success_statuses() -> None:
 
     async def perform_request() -> None:
         async with XClient(
-            StubSecretStore("access-token"),
+            StubSecretStore(x_access_token="access-token"),
             transport=httpx.MockTransport(handler),
         ) as client:
             await client.get("/2/test")

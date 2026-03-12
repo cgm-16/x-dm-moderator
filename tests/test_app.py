@@ -1,4 +1,3 @@
-import asyncio
 import base64
 import hashlib
 import hmac
@@ -13,6 +12,7 @@ from fastapi.testclient import TestClient
 
 from dmguard.app import APP_VERSION, MAX_REQUEST_BODY_BYTES
 from dmguard.config import AppConfig
+from tests.conftest import StubSecretStore, run
 
 
 def build_config(*, debug: bool = False) -> AppConfig:
@@ -22,21 +22,6 @@ def build_config(*, debug: bool = False) -> AppConfig:
         public_hostname="dmguard.duckdns.org",
         acme_email="ori@example.com",
     )
-
-
-class StubSecretStore:
-    def __init__(self, consumer_secret: str) -> None:
-        self._consumer_secret = consumer_secret
-
-    def get(self, key: str) -> str:
-        if key != "x_consumer_secret":
-            raise AssertionError(f"Unexpected secret key: {key}")
-
-        return self._consumer_secret
-
-
-def run(coroutine):
-    return asyncio.run(coroutine)
 
 
 def build_signature(raw_body: bytes, consumer_secret: str) -> str:
@@ -84,10 +69,11 @@ def build_webhook_client(
     run(bootstrap_database(db_path))
     app = create_app(
         build_config(),
-        StubSecretStore(consumer_secret),
+        StubSecretStore(x_consumer_secret=consumer_secret),
         db_path=db_path,
     )
     return TestClient(app), db_path
+
 
 
 def expected_app_version() -> str:
@@ -179,7 +165,9 @@ def test_crc_endpoint_returns_expected_response_token() -> None:
 
     crc_token = "challenge-token"
     consumer_secret = "consumer-secret"
-    client = TestClient(create_app(build_config(), StubSecretStore(consumer_secret)))
+    client = TestClient(
+        create_app(build_config(), StubSecretStore(x_consumer_secret=consumer_secret))
+    )
 
     response = client.get("/webhooks/x", params={"crc_token": crc_token})
 
@@ -197,7 +185,9 @@ def test_crc_endpoint_returns_expected_response_token() -> None:
 def test_crc_endpoint_returns_400_when_crc_token_is_missing() -> None:
     from dmguard.app import create_app
 
-    client = TestClient(create_app(build_config(), StubSecretStore("consumer-secret")))
+    client = TestClient(
+        create_app(build_config(), StubSecretStore(x_consumer_secret="consumer-secret"))
+    )
 
     response = client.get("/webhooks/x")
 
@@ -366,7 +356,7 @@ def test_webhook_post_bootstraps_schema_before_first_write(tmp_path: Path) -> No
     client = TestClient(
         create_app(
             build_config(),
-            StubSecretStore(consumer_secret),
+            StubSecretStore(x_consumer_secret=consumer_secret),
             db_path=db_path,
         )
     )

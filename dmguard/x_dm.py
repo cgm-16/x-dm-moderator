@@ -3,7 +3,7 @@ from pydantic import BaseModel, Field
 from dmguard.x_client import XClient
 
 
-_DM_EVENT_FIELDS = "attachments,created_at,dm_conversation_id,sender_id,text"
+_DM_EVENT_FIELDS = "attachments,created_at,sender_id,text"
 _DM_EXPANSIONS = "attachments.media_keys,sender_id"
 _DM_MEDIA_FIELDS = "type,url,preview_image_url,variants"
 

@@ -1,8 +1,9 @@
-import asyncio
 import sqlite3
 from pathlib import Path
 
 import pytest
+
+from tests.conftest import run
 
 
 EXPECTED_TABLES = {
@@ -35,10 +36,6 @@ EXPECTED_INDEX_COLUMNS = {
         "idx_webhook_events_received_at": ["received_at"],
     },
 }
-
-
-def run(coroutine):
-    return asyncio.run(coroutine)
 
 
 async def insert_and_read_value(db_path: Path) -> str:
