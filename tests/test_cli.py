@@ -1,4 +1,5 @@
 from pathlib import Path
+from typing import Literal
 import json
 import os
 import subprocess
@@ -132,7 +133,7 @@ def save_state(state_path: Path, *, app_service_status: str = "pending") -> None
 
 async def fetch_sender_row(
     db_path: Path,
-    table_name: str,
+    table_name: Literal["allowed_senders", "blocked_senders", "block_failed_senders"],
     sender_id: str,
 ) -> tuple[str, ...] | None:
     from dmguard.db import get_connection
