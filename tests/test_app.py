@@ -326,7 +326,7 @@ def test_health_endpoint_reports_not_ready_when_db_unreachable(
     assert worker_cancelled.wait(timeout=1)
     assert response.status_code == 200
     assert response.json() == {
-        "ok": False,
+        "ok": True,
         "configured": False,
         "ready": False,
         "queued_jobs": 0,

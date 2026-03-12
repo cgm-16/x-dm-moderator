@@ -243,7 +243,7 @@ async def _build_health_payload(
 
     ready = _worker_running(app)
     return {
-        "ok": ready,
+        "ok": True,
         "configured": configured,
         "ready": ready,
         "queued_jobs": queued_jobs,
@@ -257,7 +257,7 @@ async def _build_health_payload(
 
 def _health_fallback_payload() -> dict[str, bool | int | str | None]:
     return {
-        "ok": False,
+        "ok": True,
         "configured": False,
         "ready": False,
         "queued_jobs": 0,
