@@ -1,13 +1,9 @@
-import asyncio
 from pathlib import Path
 
 import pytest
 
+from tests.conftest import run
 from dmguard.job_machine import JobStage, JobStatus
-
-
-def run(coroutine):
-    return asyncio.run(coroutine)
 
 
 async def bootstrap_database(db_path: Path) -> None:
