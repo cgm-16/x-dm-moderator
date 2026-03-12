@@ -1,20 +1,28 @@
 from pathlib import Path
 import json
+import os
+import subprocess
+import sys
 
 import pytest
 import yaml
+
+from tests.conftest import bootstrap_database, run
 
 
 def configure_cli_paths(monkeypatch: pytest.MonkeyPatch, tmp_path: Path):
     from dmguard import cli
 
     data_root = tmp_path / "program-data"
+    db_path = data_root / "state.db"
+    data_root.mkdir(parents=True, exist_ok=True)
 
     monkeypatch.setattr(cli, "PROGRAM_DATA_DIR", data_root)
     monkeypatch.setattr(cli, "CONFIG_PATH", data_root / "config.yaml")
     monkeypatch.setattr(cli, "SECRETS_PATH", data_root / "secrets.bin")
     monkeypatch.setattr(cli, "SETUP_STATE_PATH", data_root / "setup_state.json")
     monkeypatch.setattr(cli, "SETUP_LOG_PATH", data_root / "setup.log")
+    monkeypatch.setattr(cli, "DB_PATH", db_path, raising=False)
     monkeypatch.setattr(
         cli,
         "KNOWN_SETUP_OUTPUTS",
@@ -31,7 +39,7 @@ def configure_cli_paths(monkeypatch: pytest.MonkeyPatch, tmp_path: Path):
     return cli
 
 
-def save_state(state_path: Path) -> None:
+def save_state(state_path: Path, *, app_service_status: str = "pending") -> None:
     from dmguard.setup_state import SetupState, StageStatus, save_setup_state
 
     save_setup_state(
@@ -102,9 +110,17 @@ def save_state(state_path: Path) -> None:
                     artifacts=[],
                 ),
                 "app_service": StageStatus(
-                    status="pending",
-                    started_at=None,
-                    finished_at=None,
+                    status=app_service_status,
+                    started_at=(
+                        "2026-03-11T12:00:00+00:00"
+                        if app_service_status == "done"
+                        else None
+                    ),
+                    finished_at=(
+                        "2026-03-11T12:00:00+00:00"
+                        if app_service_status == "done"
+                        else None
+                    ),
                     artifacts=[],
                 ),
             },
@@ -114,7 +130,70 @@ def save_state(state_path: Path) -> None:
     )
 
 
-def test_build_parser_recognizes_setup_subcommands() -> None:
+async def fetch_sender_row(
+    db_path: Path,
+    table_name: str,
+    sender_id: str,
+) -> tuple[str, ...] | None:
+    from dmguard.db import get_connection
+
+    async with get_connection(db_path) as connection:
+        cursor = await connection.execute(
+            f"SELECT * FROM {table_name} WHERE sender_id = ?",
+            (sender_id,),
+        )
+
+        try:
+            return await cursor.fetchone()
+        finally:
+            await cursor.close()
+
+
+def write_secret_file(path: Path) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(
+        json.dumps(
+            {
+                "duckdns_token": "duckdns-token",
+                "x_access_token": "access-token",
+                "x_refresh_token": "refresh-token",
+                "x_consumer_secret": "consumer-secret",
+                "x_app_bearer": "app-bearer",
+                "hf_token": "hf-token",
+            }
+        ),
+        encoding="utf-8",
+    )
+
+
+async def seed_sender_state(db_path: Path) -> None:
+    from dmguard.db import get_connection
+    from dmguard.repo_senders import (
+        insert_allowed_sender,
+        insert_blocked_sender,
+        upsert_block_failed_sender,
+    )
+
+    async with get_connection(db_path) as connection:
+        await insert_allowed_sender(
+            connection,
+            sender_id="sender-1",
+            source_event_id="event-1",
+        )
+        await insert_blocked_sender(
+            connection,
+            sender_id="sender-2",
+            source_event_id="event-2",
+        )
+        await upsert_block_failed_sender(
+            connection,
+            sender_id="sender-2",
+            next_retry_at="2026-03-12T00:00:00Z",
+        )
+        await connection.commit()
+
+
+def test_build_parser_recognizes_cli_subcommands() -> None:
     from dmguard.cli import build_parser
 
     parser = build_parser()
@@ -124,6 +203,33 @@ def test_build_parser_recognizes_setup_subcommands() -> None:
     assert parser.parse_args(["warmup"]).command == "warmup"
     assert parser.parse_args(["status"]).command == "status"
     assert parser.parse_args(["status", "--full"]).full is True
+    allowlist_args = parser.parse_args(
+        [
+            "allowlist",
+            "add",
+            "--user-id",
+            "sender-1",
+            "--source-event-id",
+            "event-1",
+        ]
+    )
+    assert allowlist_args.command == "allowlist"
+    assert allowlist_args.allowlist_command == "add"
+    assert allowlist_args.user_id == "sender-1"
+    assert allowlist_args.source_event_id == "event-1"
+    blockstate_args = parser.parse_args(
+        ["blockstate", "remove", "--user-id", "sender-2"]
+    )
+    assert blockstate_args.command == "blockstate"
+    assert blockstate_args.blockstate_command == "remove"
+    assert blockstate_args.user_id == "sender-2"
+    selftest_args = parser.parse_args(
+        ["selftest", "--video", "clip.mp4", "--force-unsafe"]
+    )
+    assert selftest_args.command == "selftest"
+    assert selftest_args.video == Path("clip.mp4")
+    assert selftest_args.force_unsafe is True
+    assert parser.parse_args(["readycheck"]).command == "readycheck"
 
 
 def test_setup_collects_expected_inputs_and_persists_outputs(
@@ -327,3 +433,203 @@ def test_warmup_invokes_setup_warmup(
         "policy": "violence_gore",
         "yes_prob": 0.01,
     }
+
+
+def test_allowlist_add_inserts_row(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, capsys
+) -> None:
+    cli = configure_cli_paths(monkeypatch, tmp_path)
+    run(bootstrap_database(cli.DB_PATH))
+
+    exit_code = cli.main(
+        [
+            "allowlist",
+            "add",
+            "--user-id",
+            "sender-1",
+            "--source-event-id",
+            "event-1",
+        ]
+    )
+
+    captured = capsys.readouterr()
+    row = run(fetch_sender_row(cli.DB_PATH, "allowed_senders", "sender-1"))
+
+    assert exit_code == 0
+    assert captured.err == ""
+    assert row is not None
+    assert row[0] == "sender-1"
+    assert row[2] == "event-1"
+
+
+def test_allowlist_remove_deletes_row(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, capsys
+) -> None:
+    cli = configure_cli_paths(monkeypatch, tmp_path)
+    run(bootstrap_database(cli.DB_PATH))
+    run(seed_sender_state(cli.DB_PATH))
+
+    exit_code = cli.main(["allowlist", "remove", "--user-id", "sender-1"])
+
+    captured = capsys.readouterr()
+    row = run(fetch_sender_row(cli.DB_PATH, "allowed_senders", "sender-1"))
+
+    assert exit_code == 0
+    assert captured.err == ""
+    assert row is None
+
+
+def test_blockstate_remove_clears_local_block_tables(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, capsys
+) -> None:
+    cli = configure_cli_paths(monkeypatch, tmp_path)
+    run(bootstrap_database(cli.DB_PATH))
+    run(seed_sender_state(cli.DB_PATH))
+
+    exit_code = cli.main(["blockstate", "remove", "--user-id", "sender-2"])
+
+    captured = capsys.readouterr()
+    blocked_row = run(fetch_sender_row(cli.DB_PATH, "blocked_senders", "sender-2"))
+    failed_row = run(fetch_sender_row(cli.DB_PATH, "block_failed_senders", "sender-2"))
+
+    assert exit_code == 0
+    assert captured.err == ""
+    assert blocked_row is None
+    assert failed_row is None
+
+
+def test_selftest_force_safe_prints_human_readable_result(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, capsys
+) -> None:
+    cli = configure_cli_paths(monkeypatch, tmp_path)
+    image_path = tmp_path / "image.jpg"
+    image_path.write_text("image-bytes", encoding="utf-8")
+
+    exit_code = cli.main(["selftest", "--image", str(image_path), "--force-safe"])
+
+    captured = capsys.readouterr()
+
+    assert exit_code == 0
+    assert captured.err == ""
+    assert "safe" in captured.out
+    assert "0.01" in captured.out
+    assert str(image_path) in captured.out
+
+
+def test_selftest_force_unsafe_video_prints_trigger_info(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, capsys
+) -> None:
+    cli = configure_cli_paths(monkeypatch, tmp_path)
+    video_path = tmp_path / "clip.mp4"
+    video_path.write_text("video-bytes", encoding="utf-8")
+
+    exit_code = cli.main(["selftest", "--video", str(video_path), "--force-unsafe"])
+
+    captured = capsys.readouterr()
+
+    assert exit_code == 0
+    assert captured.err == ""
+    assert "unsafe" in captured.out
+    assert "trigger_frame_index=0" in captured.out
+    assert "trigger_time_sec=1.0" in captured.out
+
+
+def test_selftest_missing_file_fails_with_clear_error(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, capsys
+) -> None:
+    cli = configure_cli_paths(monkeypatch, tmp_path)
+    missing_path = tmp_path / "missing.jpg"
+
+    exit_code = cli.main(["selftest", "--image", str(missing_path)])
+
+    captured = capsys.readouterr()
+
+    assert exit_code == 1
+    assert captured.out == ""
+    assert str(missing_path) in captured.err
+    assert "does not exist" in captured.err
+
+
+def test_readycheck_prints_pass_fail_per_check(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, capsys
+) -> None:
+    cli = configure_cli_paths(monkeypatch, tmp_path)
+    run(bootstrap_database(cli.DB_PATH))
+    write_secret_file(cli.SECRETS_PATH)
+    cli.SETUP_STATE_PATH.parent.mkdir(parents=True, exist_ok=True)
+    save_state(cli.SETUP_STATE_PATH, app_service_status="done")
+
+    exit_code = cli.main(["readycheck"])
+
+    captured = capsys.readouterr()
+
+    assert exit_code == 0
+    assert captured.err == ""
+    assert captured.out.strip().splitlines() == [
+        "PASS db reachable",
+        "PASS secrets loadable",
+        "PASS worker running",
+    ]
+
+
+def test_readycheck_returns_non_zero_when_app_service_is_not_ready(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, capsys
+) -> None:
+    cli = configure_cli_paths(monkeypatch, tmp_path)
+    run(bootstrap_database(cli.DB_PATH))
+    write_secret_file(cli.SECRETS_PATH)
+    cli.SETUP_STATE_PATH.parent.mkdir(parents=True, exist_ok=True)
+    save_state(cli.SETUP_STATE_PATH)
+
+    exit_code = cli.main(["readycheck"])
+
+    captured = capsys.readouterr()
+
+    assert exit_code == 1
+    assert captured.err == ""
+    assert captured.out.strip().splitlines() == [
+        "PASS db reachable",
+        "PASS secrets loadable",
+        "FAIL worker running: app_service stage is not done",
+    ]
+
+
+def test_readycheck_end_to_end_via_subprocess(tmp_path: Path) -> None:
+    repo_root = Path(__file__).resolve().parents[1]
+    app_root = tmp_path / "program-files"
+    data_root = tmp_path / "program-data"
+    db_path = data_root / "state.db"
+    secrets_path = data_root / "secrets.bin"
+    state_path = data_root / "setup_state.json"
+
+    app_root.mkdir(parents=True, exist_ok=True)
+    data_root.mkdir(parents=True, exist_ok=True)
+    run(bootstrap_database(db_path))
+    write_secret_file(secrets_path)
+    save_state(state_path, app_service_status="done")
+
+    result = subprocess.run(
+        [
+            sys.executable,
+            "-c",
+            "from dmguard.cli import main; raise SystemExit(main())",
+            "readycheck",
+        ],
+        capture_output=True,
+        check=False,
+        cwd=repo_root,
+        env={
+            **os.environ,
+            "DMGUARD_APP_ROOT": str(app_root),
+            "DMGUARD_DATA_ROOT": str(data_root),
+        },
+        text=True,
+    )
+
+    assert result.returncode == 0
+    assert result.stderr == ""
+    assert result.stdout.strip().splitlines() == [
+        "PASS db reachable",
+        "PASS secrets loadable",
+        "PASS worker running",
+    ]

@@ -34,6 +34,20 @@ async def get_allowed_sender(
     )
 
 
+async def delete_allowed_sender(
+    connection: aiosqlite.Connection,
+    sender_id: str,
+) -> None:
+    cursor = await connection.execute(
+        """
+        DELETE FROM allowed_senders
+        WHERE sender_id = ?
+        """,
+        (sender_id,),
+    )
+    await cursor.close()
+
+
 async def insert_blocked_sender(
     connection: aiosqlite.Connection,
     *,
@@ -63,6 +77,20 @@ async def get_blocked_sender(
         """,
         (sender_id,),
     )
+
+
+async def delete_blocked_sender(
+    connection: aiosqlite.Connection,
+    sender_id: str,
+) -> None:
+    cursor = await connection.execute(
+        """
+        DELETE FROM blocked_senders
+        WHERE sender_id = ?
+        """,
+        (sender_id,),
+    )
+    await cursor.close()
 
 
 async def upsert_block_failed_sender(
@@ -125,7 +153,24 @@ async def get_block_failed_sender(
     )
 
 
+async def delete_block_failed_sender(
+    connection: aiosqlite.Connection,
+    sender_id: str,
+) -> None:
+    cursor = await connection.execute(
+        """
+        DELETE FROM block_failed_senders
+        WHERE sender_id = ?
+        """,
+        (sender_id,),
+    )
+    await cursor.close()
+
+
 __all__ = [
+    "delete_allowed_sender",
+    "delete_block_failed_sender",
+    "delete_blocked_sender",
     "get_allowed_sender",
     "get_block_failed_sender",
     "get_blocked_sender",

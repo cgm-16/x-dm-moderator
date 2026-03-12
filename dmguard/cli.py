@@ -1,3 +1,4 @@
+import asyncio
 from argparse import ArgumentParser
 from datetime import datetime, timezone
 from pathlib import Path
@@ -12,7 +13,15 @@ import httpx
 import yaml
 
 from dmguard.classifier_runner import run_classifier
-from dmguard.paths import CONFIG_PATH, PROGRAM_DATA_DIR, SECRETS_PATH
+from dmguard.db import get_connection
+from dmguard.paths import CONFIG_PATH, DB_PATH, PROGRAM_DATA_DIR, SECRETS_PATH
+from dmguard.repo_senders import (
+    delete_allowed_sender,
+    delete_block_failed_sender,
+    delete_blocked_sender,
+    insert_allowed_sender,
+)
+from dmguard.secrets import FileSecretStore, SECRET_KEYS
 from dmguard.setup_logger import SetupLogger
 from dmguard.setup_state import (
     SETUP_STAGE_ORDER,
@@ -37,10 +46,13 @@ KNOWN_SETUP_OUTPUTS = (
     DUCKDNS_ARTIFACT_PATH,
     TRAEFIK_DIR,
 )
-DEFAULT_WARMUP_CLASSIFIER_CMD = (
+CLASSIFIER_FAKE_BASE_CMD = (
     sys.executable,
     "-m",
     "dmguard.classifier_fake",
+)
+DEFAULT_WARMUP_CLASSIFIER_CMD = (
+    *CLASSIFIER_FAKE_BASE_CMD,
     "--force-safe",
 )
 SETUP_CONFIG_DEFAULTS = {
@@ -96,6 +108,35 @@ def build_parser() -> ArgumentParser:
     status_parser = subparsers.add_parser("status")
     status_parser.add_argument("--full", action="store_true")
 
+    allowlist_parser = subparsers.add_parser("allowlist")
+    allowlist_subparsers = allowlist_parser.add_subparsers(
+        dest="allowlist_command",
+        required=True,
+    )
+    allowlist_add_parser = allowlist_subparsers.add_parser("add")
+    allowlist_add_parser.add_argument("--user-id", required=True)
+    allowlist_add_parser.add_argument("--source-event-id", required=True)
+    allowlist_remove_parser = allowlist_subparsers.add_parser("remove")
+    allowlist_remove_parser.add_argument("--user-id", required=True)
+
+    blockstate_parser = subparsers.add_parser("blockstate")
+    blockstate_subparsers = blockstate_parser.add_subparsers(
+        dest="blockstate_command",
+        required=True,
+    )
+    blockstate_remove_parser = blockstate_subparsers.add_parser("remove")
+    blockstate_remove_parser.add_argument("--user-id", required=True)
+
+    selftest_parser = subparsers.add_parser("selftest")
+    selftest_mode_group = selftest_parser.add_mutually_exclusive_group(required=True)
+    selftest_mode_group.add_argument("--image", type=Path)
+    selftest_mode_group.add_argument("--video", type=Path)
+    selftest_force_group = selftest_parser.add_mutually_exclusive_group()
+    selftest_force_group.add_argument("--force-safe", action="store_true")
+    selftest_force_group.add_argument("--force-unsafe", action="store_true")
+
+    subparsers.add_parser("readycheck")
+
     return parser
 
 
@@ -116,6 +157,14 @@ def main(argv: Sequence[str] | None = None) -> int:
             return handle_warmup()
         if args.command == "status":
             return handle_status(args)
+        if args.command == "allowlist":
+            return handle_allowlist(args)
+        if args.command == "blockstate":
+            return handle_blockstate(args)
+        if args.command == "selftest":
+            return handle_selftest(args)
+        if args.command == "readycheck":
+            return handle_readycheck()
     except Exception as exc:
         print(str(exc), file=sys.stderr)
         return 1
@@ -241,6 +290,86 @@ def handle_status(args) -> int:
     return 0
 
 
+def handle_allowlist(args) -> int:
+    if args.allowlist_command == "add":
+        asyncio.run(
+            _insert_allowed_sender(
+                sender_id=args.user_id,
+                source_event_id=args.source_event_id,
+            )
+        )
+        print(f"added allowlist sender {args.user_id}")
+        return 0
+
+    if args.allowlist_command == "remove":
+        asyncio.run(_delete_allowed_sender(args.user_id))
+        print(f"removed allowlist sender {args.user_id}")
+        return 0
+
+    raise ValueError(f"Unknown allowlist command: {args.allowlist_command}")
+
+
+def handle_blockstate(args) -> int:
+    if args.blockstate_command != "remove":
+        raise ValueError(f"Unknown blockstate command: {args.blockstate_command}")
+
+    asyncio.run(_clear_blockstate(args.user_id))
+    print(f"removed local blockstate sender {args.user_id}")
+    return 0
+
+
+def handle_selftest(args) -> int:
+    target_path = args.image or args.video
+    if target_path is None:
+        raise ValueError("selftest requires --image or --video")
+    if not target_path.exists():
+        raise ValueError(f"Selftest path does not exist: {target_path}")
+    if not target_path.is_file():
+        raise ValueError(f"Selftest path is not a file: {target_path}")
+
+    mode = "image" if args.image is not None else "video"
+    classifier_cmd = list(CLASSIFIER_FAKE_BASE_CMD)
+    if args.force_safe:
+        classifier_cmd.append("--force-safe")
+    if args.force_unsafe:
+        classifier_cmd.append("--force-unsafe")
+
+    response = run_classifier(
+        {
+            "mode": mode,
+            "files": [str(target_path)],
+            "policy": "violence_gore",
+        },
+        classifier_cmd,
+    )
+    outcome = "unsafe" if response.yes_prob >= 0.9 else "safe"
+
+    print(f"result={outcome} file={target_path} yes_prob={response.yes_prob:.2f}")
+    if response.trigger_frame_index is not None:
+        print(f"trigger_frame_index={response.trigger_frame_index}")
+    if response.trigger_time_sec is not None:
+        print(f"trigger_time_sec={response.trigger_time_sec}")
+
+    return 0
+
+
+def handle_readycheck() -> int:
+    checks = [
+        _build_check_result("db reachable", asyncio.run(_check_db_reachable())),
+        _build_check_result("secrets loadable", _check_secrets_loadable()),
+        _build_check_result("worker running", _check_worker_running()),
+    ]
+
+    for check in checks:
+        if check["ok"]:
+            print(f"PASS {check['name']}")
+            continue
+
+        print(f"FAIL {check['name']}: {check['error']}")
+
+    return 0 if all(check["ok"] for check in checks) else 1
+
+
 def run_setup_warmup() -> dict[str, object]:
     response = run_classifier(
         {
@@ -297,6 +426,79 @@ def check_public_https_reachability(hostname: str) -> dict[str, object]:
         "status_code": response.status_code,
         "url": str(response.request.url),
     }
+
+
+async def _insert_allowed_sender(*, sender_id: str, source_event_id: str) -> None:
+    async with get_connection(DB_PATH) as connection:
+        await insert_allowed_sender(
+            connection,
+            sender_id=sender_id,
+            source_event_id=source_event_id,
+        )
+        await connection.commit()
+
+
+async def _delete_allowed_sender(sender_id: str) -> None:
+    async with get_connection(DB_PATH) as connection:
+        await delete_allowed_sender(connection, sender_id)
+        await connection.commit()
+
+
+async def _clear_blockstate(sender_id: str) -> None:
+    async with get_connection(DB_PATH) as connection:
+        await delete_blocked_sender(connection, sender_id)
+        await delete_block_failed_sender(connection, sender_id)
+        await connection.commit()
+
+
+async def _check_db_reachable() -> tuple[bool, str | None]:
+    if not DB_PATH.exists():
+        return False, "database file missing"
+
+    try:
+        async with get_connection(DB_PATH) as connection:
+            cursor = await connection.execute("SELECT 1")
+
+            try:
+                await cursor.fetchone()
+            finally:
+                await cursor.close()
+    except Exception as exc:
+        return False, str(exc)
+
+    return True, None
+
+
+def _check_secrets_loadable() -> tuple[bool, str | None]:
+    store = FileSecretStore(SECRETS_PATH)
+
+    try:
+        for key in sorted(SECRET_KEYS):
+            store.get(key)
+    except Exception as exc:
+        return False, str(exc)
+
+    return True, None
+
+
+def _check_worker_running() -> tuple[bool, str | None]:
+    state = load_setup_state(SETUP_STATE_PATH)
+    if state is None:
+        return False, "setup state missing"
+
+    app_service = state.stages.get("app_service")
+    if app_service is None or app_service.status != "done":
+        return False, "app_service stage is not done"
+
+    return True, None
+
+
+def _build_check_result(
+    name: str,
+    result: tuple[bool, str | None],
+) -> dict[str, object]:
+    ok, error = result
+    return {"name": name, "ok": ok, "error": error}
 
 
 def _load_or_create_setup_state() -> SetupState:
