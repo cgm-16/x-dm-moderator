@@ -4,6 +4,7 @@ from pathlib import Path
 import pytest
 
 from dmguard.config import AppConfig
+from tests.conftest import clear_logger
 
 
 def build_config(*, log_level: str = "INFO") -> AppConfig:
@@ -13,17 +14,6 @@ def build_config(*, log_level: str = "INFO") -> AppConfig:
         public_hostname="dmguard.duckdns.org",
         acme_email="ori@example.com",
     )
-
-
-def clear_logger(name: str) -> None:
-    logger = logging.getLogger(name)
-
-    for handler in list(logger.handlers):
-        logger.removeHandler(handler)
-        handler.close()
-
-    logger.setLevel(logging.NOTSET)
-    logger.propagate = True
 
 
 @pytest.fixture(autouse=True)

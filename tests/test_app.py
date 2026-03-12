@@ -12,7 +12,7 @@ from fastapi.testclient import TestClient
 
 from dmguard.app import APP_VERSION, MAX_REQUEST_BODY_BYTES
 from dmguard.config import AppConfig
-from tests.conftest import StubSecretStore, run
+from tests.conftest import StubSecretStore, bootstrap_database, build_signature, run
 
 
 def build_config(*, debug: bool = False) -> AppConfig:
@@ -22,24 +22,6 @@ def build_config(*, debug: bool = False) -> AppConfig:
         public_hostname="dmguard.duckdns.org",
         acme_email="ori@example.com",
     )
-
-
-def build_signature(raw_body: bytes, consumer_secret: str) -> str:
-    digest = hmac.new(
-        consumer_secret.encode("utf-8"),
-        raw_body,
-        hashlib.sha256,
-    ).digest()
-    encoded = base64.b64encode(digest).decode("ascii")
-    return f"sha256={encoded}"
-
-
-async def bootstrap_database(db_path: Path) -> None:
-    from dmguard.db import get_connection
-    from dmguard.schema import bootstrap_schema
-
-    async with get_connection(db_path) as connection:
-        await bootstrap_schema(connection)
 
 
 async def fetch_all_rows(
@@ -73,7 +55,6 @@ def build_webhook_client(
         db_path=db_path,
     )
     return TestClient(app), db_path
-
 
 
 def expected_app_version() -> str:

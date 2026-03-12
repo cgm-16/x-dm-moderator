@@ -2,64 +2,8 @@ from pathlib import Path
 
 import pytest
 
-from tests.conftest import run
+from tests.conftest import bootstrap_database, insert_event_row, insert_job_row, run
 from dmguard.job_machine import JobStage, JobStatus
-
-
-async def bootstrap_database(db_path: Path) -> None:
-    from dmguard.db import get_connection
-    from dmguard.schema import bootstrap_schema
-
-    async with get_connection(db_path) as connection:
-        await bootstrap_schema(connection)
-
-
-async def insert_event_row(
-    db_path: Path,
-    *,
-    event_id: str,
-    sender_id: str | None = None,
-) -> None:
-    from dmguard.db import get_connection
-    from dmguard.repo_events import insert_event
-
-    async with get_connection(db_path) as connection:
-        await insert_event(
-            connection,
-            event_id=event_id,
-            received_at="2026-03-11T00:00:00Z",
-            payload_json='{"event_id":"%s"}' % event_id,
-            sender_id=sender_id,
-        )
-        await connection.commit()
-
-
-async def insert_job_row(
-    db_path: Path,
-    *,
-    event_id: str,
-    next_run_at: str,
-    status: JobStatus = JobStatus.queued,
-    stage: JobStage = JobStage.fetch_dm,
-    attempt: int = 0,
-    processing_started_at: str | None = None,
-) -> int:
-    from dmguard.db import get_connection
-    from dmguard.repo_jobs import insert_job
-
-    async with get_connection(db_path) as connection:
-        job_id = await insert_job(
-            connection,
-            event_id=event_id,
-            status=status,
-            stage=stage,
-            next_run_at=next_run_at,
-            attempt=attempt,
-            processing_started_at=processing_started_at,
-        )
-        await connection.commit()
-
-    return job_id
 
 
 async def fetch_job(db_path: Path, job_id: int) -> dict[str, object] | None:
