@@ -130,6 +130,51 @@ def test_worker_loop_requeues_job_after_dispatch_exception(
     assert job["processing_started_at"] is None
 
 
+def test_worker_loop_marks_job_error_when_retries_exhausted(tmp_path: Path) -> None:
+    from dmguard.worker import worker_loop
+
+    db_path = tmp_path / "state.db"
+    run(bootstrap_database(db_path))
+    run(insert_event_row(db_path, event_id="event-1"))
+    job_id = run(
+        insert_job_row(
+            db_path,
+            event_id="event-1",
+            next_run_at="2026-03-11T00:00:00Z",
+            attempt=3,
+        )
+    )
+
+    async def scenario() -> None:
+        dispatch_called = asyncio.Event()
+
+        async def dispatch_fn(_: dict[str, object]) -> None:
+            dispatch_called.set()
+            raise RuntimeError("boom")
+
+        task = asyncio.create_task(
+            worker_loop(
+                db_path,
+                dispatch_fn,
+                poll_interval_seconds=0.01,
+            )
+        )
+
+        try:
+            await asyncio.wait_for(dispatch_called.wait(), timeout=1)
+            await wait_for_job_status(db_path, job_id, JobStatus.error.value)
+        finally:
+            task.cancel()
+            with suppress(asyncio.CancelledError):
+                await task
+
+    run(scenario())
+    job = run(fetch_job(db_path, job_id))
+
+    assert job is not None
+    assert job["status"] == JobStatus.error.value
+
+
 def test_worker_loop_stops_cleanly_on_cancellation(tmp_path: Path) -> None:
     from dmguard.worker import worker_loop
 

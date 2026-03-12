@@ -27,7 +27,6 @@ async def _claim_next_job(db_path: Path) -> dict[str, object] | None:
         await connection.commit()
 
     claimed_job = dict(job)
-    claimed_job["status"] = JobStatus.processing.value
     claimed_job["attempt"] = int(job["attempt"]) + 1
     return claimed_job
 
@@ -58,7 +57,7 @@ async def _retry_or_error(
             return
 
         await connection.commit()
-        logger.exception(
+        logger.warning(
             "Worker dispatch failed; scheduled retry job_id=%s attempt=%s next_run_at=%s",
             job_id,
             attempt,
