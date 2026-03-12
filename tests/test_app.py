@@ -1,5 +1,7 @@
 import asyncio
 import base64
+from contextlib import asynccontextmanager
+from datetime import datetime, timedelta, timezone
 import hashlib
 import hmac
 from importlib import metadata
@@ -7,6 +9,7 @@ import json
 import logging
 from pathlib import Path
 import platform
+import sqlite3
 import threading
 import tomllib
 
@@ -15,7 +18,15 @@ from fastapi.testclient import TestClient
 
 from dmguard.app import APP_VERSION, MAX_REQUEST_BODY_BYTES
 from dmguard.config import AppConfig
-from tests.conftest import StubSecretStore, bootstrap_database, build_signature, run
+from dmguard.job_machine import JobStatus
+from tests.conftest import (
+    StubSecretStore,
+    bootstrap_database,
+    build_signature,
+    insert_event_row,
+    insert_job_row,
+    run,
+)
 
 
 def build_config(*, debug: bool = False) -> AppConfig:
@@ -41,6 +52,105 @@ async def fetch_all_rows(
             return await cursor.fetchall()
         finally:
             await cursor.close()
+
+
+async def seed_health_rows(db_path: Path) -> None:
+    from dmguard.db import get_connection
+
+    now = datetime.now(timezone.utc)
+    queued_at = now.isoformat().replace("+00:00", "Z")
+    processing_started_at = (
+        (now - timedelta(minutes=5))
+        .isoformat()
+        .replace(
+            "+00:00",
+            "Z",
+        )
+    )
+    recent_error_at = (now - timedelta(hours=1)).isoformat().replace("+00:00", "Z")
+
+    await insert_event_row(db_path, event_id="queued-event")
+    await insert_job_row(
+        db_path,
+        event_id="queued-event",
+        next_run_at=queued_at,
+    )
+
+    await insert_event_row(db_path, event_id="processing-event")
+    processing_job_id = await insert_job_row(
+        db_path,
+        event_id="processing-event",
+        next_run_at=queued_at,
+        status=JobStatus.processing,
+        attempt=1,
+        processing_started_at=processing_started_at,
+    )
+
+    async with get_connection(db_path) as connection:
+        await connection.execute(
+            """
+            INSERT INTO job_errors (
+              job_id,
+              stage,
+              attempt,
+              error_type,
+              error_message,
+              created_at
+            )
+            VALUES (?, ?, ?, ?, ?, ?)
+            """,
+            (
+                processing_job_id,
+                "fetch_dm",
+                1,
+                "RuntimeError",
+                "dispatch failed",
+                recent_error_at,
+            ),
+        )
+        await connection.executemany(
+            """
+            INSERT INTO kv_store (key, value, updated_at)
+            VALUES (?, ?, ?)
+            """,
+            (
+                ("system_configured", "true", "2026-03-12T08:30:00Z"),
+                ("dropped_jobs_total", "7", "2026-03-12T08:30:00Z"),
+                ("dropped_jobs_last_24h", "2", "2026-03-12T08:30:00Z"),
+                ("last_drop_at", "2026-03-12T08:25:00Z", "2026-03-12T08:30:00Z"),
+            ),
+        )
+        await connection.commit()
+
+
+def build_waiting_worker_loop(
+    expected_db_path: Path,
+    worker_started: threading.Event,
+    worker_cancelled: threading.Event,
+    calls: list[tuple[str, Path, str]] | None = None,
+):
+    async def fake_worker_loop(
+        db_path_arg: Path,
+        dispatch_fn,
+        *,
+        poll_interval_seconds: float = 5,
+        logger: logging.Logger | None = None,
+    ) -> None:
+        assert db_path_arg == expected_db_path
+        assert callable(dispatch_fn)
+        assert poll_interval_seconds == 5
+        assert logger is not None
+        if calls is not None:
+            calls.append(("worker", db_path_arg, logger.name))
+        worker_started.set()
+
+        try:
+            await asyncio.Event().wait()
+        except asyncio.CancelledError:
+            worker_cancelled.set()
+            raise
+
+    return fake_worker_loop
 
 
 def build_webhook_client(
@@ -124,27 +234,12 @@ def test_create_app_starts_worker_loop_and_cancels_on_shutdown(
         calls.append(("recover", Path(rows[0][2]), logger.name))
         return 0
 
-    async def fake_worker_loop(
-        db_path_arg: Path,
-        dispatch_fn,
-        *,
-        poll_interval_seconds: float = 5,
-        logger: logging.Logger | None = None,
-    ) -> None:
-        assert callable(dispatch_fn)
-        assert poll_interval_seconds == 5
-        assert logger is not None
-        calls.append(("worker", db_path_arg, logger.name))
-        worker_started.set()
-
-        try:
-            await asyncio.Event().wait()
-        except asyncio.CancelledError:
-            worker_cancelled.set()
-            raise
-
     monkeypatch.setattr(app_module, "recover_stale_jobs", fake_recover_stale_jobs)
-    monkeypatch.setattr(app_module, "worker_loop", fake_worker_loop)
+    monkeypatch.setattr(
+        app_module,
+        "worker_loop",
+        build_waiting_worker_loop(db_path, worker_started, worker_cancelled, calls),
+    )
 
     app = app_module.create_app(build_config(), db_path=db_path)
 
@@ -158,15 +253,89 @@ def test_create_app_starts_worker_loop_and_cancels_on_shutdown(
     ]
 
 
-def test_health_endpoint_returns_ok_payload() -> None:
-    from dmguard.app import create_app
+def test_health_endpoint_returns_aggregated_status(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    import dmguard.app as app_module
 
-    client = TestClient(create_app(build_config()))
+    db_path = tmp_path / "state.db"
+    run(bootstrap_database(db_path))
+    run(seed_health_rows(db_path))
 
-    response = client.get("/health")
+    worker_started = threading.Event()
+    worker_cancelled = threading.Event()
 
+    monkeypatch.setattr(
+        app_module,
+        "worker_loop",
+        build_waiting_worker_loop(db_path, worker_started, worker_cancelled),
+    )
+
+    app = app_module.create_app(build_config(), db_path=db_path)
+
+    with TestClient(app) as client:
+        assert worker_started.wait(timeout=1)
+        response = client.get("/health")
+
+    assert worker_cancelled.wait(timeout=1)
     assert response.status_code == 200
-    assert response.json() == {"ok": True}
+    assert response.json() == {
+        "ok": True,
+        "configured": True,
+        "ready": True,
+        "queued_jobs": 1,
+        "processing_jobs": 1,
+        "error_jobs_last_24h": 1,
+        "dropped_jobs_total": 7,
+        "dropped_jobs_last_24h": 2,
+        "last_drop_at": "2026-03-12T08:25:00Z",
+    }
+
+
+def test_health_endpoint_reports_not_ready_when_db_unreachable(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    import dmguard.app as app_module
+
+    db_path = tmp_path / "state.db"
+    run(bootstrap_database(db_path))
+
+    worker_started = threading.Event()
+    worker_cancelled = threading.Event()
+
+    @asynccontextmanager
+    async def broken_get_connection(_db_path: Path):
+        raise sqlite3.OperationalError("database unavailable")
+        yield
+
+    monkeypatch.setattr(
+        app_module,
+        "worker_loop",
+        build_waiting_worker_loop(db_path, worker_started, worker_cancelled),
+    )
+
+    app = app_module.create_app(build_config(), db_path=db_path)
+
+    with TestClient(app) as client:
+        assert worker_started.wait(timeout=1)
+        monkeypatch.setattr(app_module, "get_connection", broken_get_connection)
+        response = client.get("/health")
+
+    assert worker_cancelled.wait(timeout=1)
+    assert response.status_code == 200
+    assert response.json() == {
+        "ok": False,
+        "configured": False,
+        "ready": False,
+        "queued_jobs": 0,
+        "processing_jobs": 0,
+        "error_jobs_last_24h": 0,
+        "dropped_jobs_total": 0,
+        "dropped_jobs_last_24h": 0,
+        "last_drop_at": None,
+    }
 
 
 def test_version_endpoint_returns_version_metadata() -> None:

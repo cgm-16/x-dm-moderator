@@ -24,6 +24,7 @@ from dmguard.paths import DB_PATH
 from dmguard.recovery import recover_stale_jobs
 from dmguard.repo_events import insert_event
 from dmguard.repo_jobs import insert_job
+from dmguard.repo_kv import kv_get
 from dmguard.repo_rejected import insert_rejected_request
 from dmguard.schema import bootstrap_schema
 from dmguard.secrets import FileSecretStore, SecretStore
@@ -168,6 +169,104 @@ def _request_client_host(request: Request) -> str | None:
         return None
 
     return request.client.host
+
+
+def _parse_bool(value: str | None) -> bool:
+    if value is None:
+        return False
+
+    return value.strip().lower() in {"1", "true"}
+
+
+def _parse_int(value: str | None) -> int:
+    if value is None:
+        return 0
+
+    try:
+        return int(value)
+    except ValueError:
+        return 0
+
+
+async def _count_rows(
+    connection,
+    query: str,
+    params: tuple[object, ...] = (),
+) -> int:
+    cursor = await connection.execute(query, params)
+
+    try:
+        row = await cursor.fetchone()
+    finally:
+        await cursor.close()
+
+    if row is None:
+        return 0
+
+    return int(row[0])
+
+
+def _worker_running(app: FastAPI) -> bool:
+    worker_task = getattr(app.state, "worker_task", None)
+    return worker_task is not None and not worker_task.done()
+
+
+async def _build_health_payload(
+    app: FastAPI,
+    db_path: Path,
+) -> dict[str, bool | int | str | None]:
+    async with get_connection(db_path) as connection:
+        configured = _parse_bool(await kv_get(connection, "system_configured"))
+        dropped_jobs_total = _parse_int(await kv_get(connection, "dropped_jobs_total"))
+        dropped_jobs_last_24h = _parse_int(
+            await kv_get(connection, "dropped_jobs_last_24h")
+        )
+        last_drop_at = await kv_get(connection, "last_drop_at")
+        queued_jobs = await _count_rows(
+            connection,
+            "SELECT COUNT(*) FROM jobs WHERE status = ?",
+            (JobStatus.queued.value,),
+        )
+        processing_jobs = await _count_rows(
+            connection,
+            "SELECT COUNT(*) FROM jobs WHERE status = ?",
+            (JobStatus.processing.value,),
+        )
+        error_jobs_last_24h = await _count_rows(
+            connection,
+            """
+            SELECT COUNT(*)
+            FROM job_errors
+            WHERE created_at >= datetime('now', '-24 hours')
+            """,
+        )
+
+    ready = _worker_running(app)
+    return {
+        "ok": ready,
+        "configured": configured,
+        "ready": ready,
+        "queued_jobs": queued_jobs,
+        "processing_jobs": processing_jobs,
+        "error_jobs_last_24h": error_jobs_last_24h,
+        "dropped_jobs_total": dropped_jobs_total,
+        "dropped_jobs_last_24h": dropped_jobs_last_24h,
+        "last_drop_at": last_drop_at or None,
+    }
+
+
+def _health_fallback_payload() -> dict[str, bool | int | str | None]:
+    return {
+        "ok": False,
+        "configured": False,
+        "ready": False,
+        "queued_jobs": 0,
+        "processing_jobs": 0,
+        "error_jobs_last_24h": 0,
+        "dropped_jobs_total": 0,
+        "dropped_jobs_last_24h": 0,
+        "last_drop_at": None,
+    }
 
 
 async def _persist_rejected_request(
@@ -325,6 +424,7 @@ def create_app(
                 logger=app_logger,
             )
         )
+        app.state.worker_task = task
 
         try:
             yield
@@ -332,6 +432,7 @@ def create_app(
             task.cancel()
             with suppress(asyncio.CancelledError):
                 await task
+            app.state.worker_task = None
 
     app = FastAPI(
         docs_url=docs_url,
@@ -341,6 +442,7 @@ def create_app(
         version=version_info["version"],
     )
     app.state.version_info = version_info
+    app.state.worker_task = None
     app.add_middleware(
         RequestBodyLimitMiddleware,
         max_body_bytes=MAX_REQUEST_BODY_BYTES,
@@ -411,8 +513,14 @@ def create_app(
         return Response(status_code=200)
 
     @app.get("/health")
-    async def health() -> dict[str, bool]:
-        return {"ok": True}
+    async def health() -> dict[str, bool | int | str | None]:
+        try:
+            return await _build_health_payload(app, app_db_path)
+        except sqlite3.Error:
+            app_logger.warning(
+                "Health check failed because the database is unreachable"
+            )
+            return _health_fallback_payload()
 
     @app.get("/version")
     async def version() -> dict[str, str]:
