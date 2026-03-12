@@ -60,7 +60,7 @@ GitHub repo: https://github.com/cgm-16/x-dm-moderator
 
 - [x] #25 Classifier subprocess contract + fake entrypoint — deps: #1
 - [x] #26 Subprocess runner + timeout — deps: #25
-- [ ] #27 Selftest CLI — deps: #26
+- [x] #27 Selftest CLI — deps: #26
 
 ## Milestone 9 — Moderation Engine
 

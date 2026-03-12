@@ -222,7 +222,7 @@ Project: X DM Image Safety Filter Prototype (v0.1)
 - [x] Implement subprocess contract
 - [x] Implement fake classifier mode for early tests
 - [ ] Integrate real ShieldGemma inference
-- [ ] Implement selftest CLI
+- [x] Implement selftest CLI
 - [x] Add classifier contract tests
 
 ---
@@ -350,7 +350,7 @@ Project: X DM Image Safety Filter Prototype (v0.1)
 - [x] `readycheck`
 - [ ] Implement allowlist add/remove
 - [ ] Implement blockstate remove
-- [ ] Implement selftest
+- [x] Implement selftest
 - [ ] Implement readycheck
 - [ ] Add CLI tests
 

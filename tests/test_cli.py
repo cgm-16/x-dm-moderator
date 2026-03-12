@@ -121,6 +121,9 @@ def test_build_parser_recognizes_setup_subcommands() -> None:
 
     assert parser.parse_args(["setup"]).command == "setup"
     assert parser.parse_args(["reset", "--force"]).command == "reset"
+    assert (
+        parser.parse_args(["selftest", "--image", "sample.jpg"]).command == "selftest"
+    )
     assert parser.parse_args(["warmup"]).command == "warmup"
     assert parser.parse_args(["status"]).command == "status"
     assert parser.parse_args(["status", "--full"]).full is True
@@ -327,3 +330,104 @@ def test_warmup_invokes_setup_warmup(
         "policy": "violence_gore",
         "yes_prob": 0.01,
     }
+
+
+def test_selftest_force_safe_prints_safe_result(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, capsys
+) -> None:
+    from dmguard import cli
+    from dmguard.classifier_contract import ClassifierResponse
+
+    image_path = tmp_path / "sample.jpg"
+    image_path.write_bytes(b"image")
+    calls: list[tuple[dict[str, object], tuple[str, ...]]] = []
+
+    def fake_run_classifier(
+        input_data: dict[str, object], classifier_cmd: tuple[str, ...]
+    ) -> ClassifierResponse:
+        calls.append((input_data, classifier_cmd))
+        return ClassifierResponse(policy="violence_gore", yes_prob=0.01)
+
+    monkeypatch.setattr(cli, "run_classifier", fake_run_classifier)
+
+    exit_code = cli.main(["selftest", "--image", str(image_path), "--force-safe"])
+
+    captured = capsys.readouterr()
+
+    assert exit_code == 0
+    assert "safe" in captured.out.lower()
+    assert "0.01" in captured.out
+    assert calls == [
+        (
+            {
+                "mode": "image",
+                "files": [str(image_path)],
+                "policy": "violence_gore",
+            },
+            (
+                cli.DEFAULT_SELFTEST_CLASSIFIER_MODULE[0],
+                cli.DEFAULT_SELFTEST_CLASSIFIER_MODULE[1],
+                cli.DEFAULT_SELFTEST_CLASSIFIER_MODULE[2],
+                "--force-safe",
+            ),
+        )
+    ]
+
+
+def test_selftest_force_unsafe_video_prints_trigger_info(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, capsys
+) -> None:
+    from dmguard import cli
+    from dmguard.classifier_contract import ClassifierResponse
+
+    video_path = tmp_path / "sample.mp4"
+    video_path.write_bytes(b"video")
+
+    def fake_run_classifier(
+        input_data: dict[str, object], classifier_cmd: tuple[str, ...]
+    ) -> ClassifierResponse:
+        assert input_data == {
+            "mode": "video",
+            "files": [str(video_path)],
+            "policy": "violence_gore",
+        }
+        assert classifier_cmd == (
+            cli.DEFAULT_SELFTEST_CLASSIFIER_MODULE[0],
+            cli.DEFAULT_SELFTEST_CLASSIFIER_MODULE[1],
+            cli.DEFAULT_SELFTEST_CLASSIFIER_MODULE[2],
+            "--force-unsafe",
+        )
+        return ClassifierResponse(
+            policy="violence_gore",
+            yes_prob=0.99,
+            trigger_frame_index=0,
+            trigger_time_sec=1.0,
+        )
+
+    monkeypatch.setattr(cli, "run_classifier", fake_run_classifier)
+
+    exit_code = cli.main(["selftest", "--video", str(video_path), "--force-unsafe"])
+
+    captured = capsys.readouterr()
+
+    assert exit_code == 0
+    assert "unsafe" in captured.out.lower()
+    assert "trigger" in captured.out.lower()
+    assert "0" in captured.out
+    assert "1.0" in captured.out
+
+
+def test_selftest_invalid_path_fails_with_clear_error_message(
+    tmp_path: Path, capsys
+) -> None:
+    from dmguard import cli
+
+    missing_path = tmp_path / "missing.jpg"
+
+    exit_code = cli.main(["selftest", "--image", str(missing_path)])
+
+    captured = capsys.readouterr()
+
+    assert exit_code == 1
+    assert "not found" in captured.err.lower()
+    assert str(missing_path) in captured.err

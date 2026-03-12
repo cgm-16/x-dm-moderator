@@ -11,6 +11,7 @@ import sys
 import httpx
 import yaml
 
+from dmguard.classifier_contract import ClassifierResponse
 from dmguard.classifier_runner import run_classifier
 from dmguard.paths import CONFIG_PATH, PROGRAM_DATA_DIR, SECRETS_PATH
 from dmguard.setup_logger import SetupLogger
@@ -43,6 +44,13 @@ DEFAULT_WARMUP_CLASSIFIER_CMD = (
     "dmguard.classifier_fake",
     "--force-safe",
 )
+DEFAULT_SELFTEST_CLASSIFIER_MODULE = (
+    sys.executable,
+    "-m",
+    "dmguard.classifier_fake",
+)
+SELFTEST_POLICY = "violence_gore"
+SELFTEST_UNSAFE_THRESHOLD = 0.9
 SETUP_CONFIG_DEFAULTS = {
     "debug": False,
     "log_level": "INFO",
@@ -91,6 +99,14 @@ def build_parser() -> ArgumentParser:
     reset_parser = subparsers.add_parser("reset")
     reset_parser.add_argument("--force", action="store_true")
 
+    selftest_parser = subparsers.add_parser("selftest")
+    selftest_target_group = selftest_parser.add_mutually_exclusive_group(required=True)
+    selftest_target_group.add_argument("--image", type=Path)
+    selftest_target_group.add_argument("--video", type=Path)
+    selftest_force_group = selftest_parser.add_mutually_exclusive_group()
+    selftest_force_group.add_argument("--force-safe", action="store_true")
+    selftest_force_group.add_argument("--force-unsafe", action="store_true")
+
     subparsers.add_parser("warmup")
 
     status_parser = subparsers.add_parser("status")
@@ -112,6 +128,8 @@ def main(argv: Sequence[str] | None = None) -> int:
             return handle_setup(args)
         if args.command == "reset":
             return handle_reset(args)
+        if args.command == "selftest":
+            return handle_selftest(args)
         if args.command == "warmup":
             return handle_warmup()
         if args.command == "status":
@@ -241,6 +259,24 @@ def handle_status(args) -> int:
     return 0
 
 
+def handle_selftest(args) -> int:
+    mode, input_path = _resolve_selftest_target(args)
+
+    if not input_path.is_file():
+        raise ValueError(f"Input file not found: {input_path}")
+
+    response = run_classifier(
+        {
+            "mode": mode,
+            "files": [str(input_path)],
+            "policy": SELFTEST_POLICY,
+        },
+        _build_selftest_classifier_cmd(args),
+    )
+    print(_format_selftest_result(mode, input_path, response))
+    return 0
+
+
 def run_setup_warmup() -> dict[str, object]:
     response = run_classifier(
         {
@@ -297,6 +333,47 @@ def check_public_https_reachability(hostname: str) -> dict[str, object]:
         "status_code": response.status_code,
         "url": str(response.request.url),
     }
+
+
+def _resolve_selftest_target(args) -> tuple[str, Path]:
+    if args.image is not None:
+        return "image", args.image
+
+    if args.video is not None:
+        return "video", args.video
+
+    raise ValueError("either --image or --video is required")
+
+
+def _build_selftest_classifier_cmd(args) -> tuple[str, ...]:
+    classifier_cmd = list(DEFAULT_SELFTEST_CLASSIFIER_MODULE)
+
+    if args.force_safe:
+        classifier_cmd.append("--force-safe")
+    if args.force_unsafe:
+        classifier_cmd.append("--force-unsafe")
+
+    return tuple(classifier_cmd)
+
+
+def _format_selftest_result(
+    mode: str, input_path: Path, response: ClassifierResponse
+) -> str:
+    verdict = "unsafe" if response.yes_prob >= SELFTEST_UNSAFE_THRESHOLD else "safe"
+    output_lines = [
+        f"Result: {verdict}",
+        f"Policy: {response.policy}",
+        f"Score: {response.yes_prob:.2f}",
+        f"Mode: {mode}",
+        f"File: {input_path}",
+    ]
+
+    if response.trigger_frame_index is not None:
+        output_lines.append(f"Trigger frame: {response.trigger_frame_index}")
+    if response.trigger_time_sec is not None:
+        output_lines.append(f"Trigger time (s): {response.trigger_time_sec}")
+
+    return "\n".join(output_lines)
 
 
 def _load_or_create_setup_state() -> SetupState:
