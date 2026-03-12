@@ -203,7 +203,7 @@ Project: X DM Image Safety Filter Prototype (v0.1)
 - [x] Implement attachment dispatch
 - [x] Implement authenticated media download
 - [x] Implement temp file lifecycle
-- [ ] Implement frame extraction
+- [x] Implement frame extraction
 - [ ] Add media pipeline tests
 
 ---
