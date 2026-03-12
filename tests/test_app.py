@@ -3,6 +3,7 @@ import hashlib
 import hmac
 from importlib import metadata
 import json
+import logging
 from pathlib import Path
 import platform
 import tomllib
@@ -73,6 +74,33 @@ def test_create_app_succeeds_without_db() -> None:
     app = create_app(build_config())
 
     assert app is not None
+
+
+def test_create_app_recovers_stale_jobs_on_startup(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    import dmguard.app as app_module
+
+    db_path = tmp_path / "state.db"
+    run(bootstrap_database(db_path))
+
+    calls: list[tuple[Path, str]] = []
+
+    async def fake_recover_stale_jobs(connection, logger: logging.Logger) -> int:
+        pragma = "pragma database_list"
+        rows = await connection.execute_fetchall(pragma)
+        calls.append((Path(rows[0][2]), logger.name))
+        return 0
+
+    monkeypatch.setattr(app_module, "recover_stale_jobs", fake_recover_stale_jobs)
+
+    app = app_module.create_app(build_config(), db_path=db_path)
+
+    with TestClient(app):
+        pass
+
+    assert calls == [(db_path, "dmguard")]
 
 
 def test_health_endpoint_returns_ok_payload() -> None:

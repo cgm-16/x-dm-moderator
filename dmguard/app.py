@@ -1,10 +1,12 @@
 from collections.abc import Awaitable, Callable
 import base64
+from contextlib import asynccontextmanager
 from datetime import datetime, timezone
 import hashlib
 import hmac
 from importlib import metadata
 import json
+import logging
 from pathlib import Path
 import platform
 import sqlite3
@@ -18,6 +20,7 @@ from dmguard.config import AppConfig
 from dmguard.db import get_connection
 from dmguard.job_machine import JobStage, JobStatus
 from dmguard.paths import DB_PATH
+from dmguard.recovery import recover_stale_jobs
 from dmguard.repo_events import insert_event
 from dmguard.repo_jobs import insert_job
 from dmguard.repo_rejected import insert_rejected_request
@@ -293,11 +296,21 @@ def create_app(
     app_secret_store = secret_store or FileSecretStore()
     app_db_path = db_path or DB_PATH
     version_info = build_version_info()
+    app_logger = logging.getLogger("dmguard")
+
+    @asynccontextmanager
+    async def lifespan(_: FastAPI):
+        async with get_connection(app_db_path) as connection:
+            await bootstrap_schema(connection)
+            await recover_stale_jobs(connection, app_logger)
+            await connection.commit()
+        yield
 
     app = FastAPI(
         docs_url=docs_url,
         redoc_url=redoc_url,
         openapi_url=openapi_url,
+        lifespan=lifespan,
         version=version_info["version"],
     )
     app.state.version_info = version_info

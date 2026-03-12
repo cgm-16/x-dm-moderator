@@ -166,10 +166,10 @@ Project: X DM Image Safety Filter Prototype (v0.1)
 - [x] Recovery is logged to `dmguard.log` only
 - [x] `/health` includes configured/ready/liveness and queue/error/drop counters
 - [x] `/version` includes app + dependency versions
-- [ ] Implement stale-processing recovery
+- [x] Implement stale-processing recovery
 - [ ] Implement `/health` aggregation
 - [x] Implement `/version`
-- [ ] Add startup recovery tests
+- [x] Add startup recovery tests
 
 ---
 
