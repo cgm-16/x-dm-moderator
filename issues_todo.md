@@ -64,7 +64,7 @@ GitHub repo: https://github.com/cgm-16/x-dm-moderator
 
 ## Milestone 9 — Moderation Engine
 
-- [ ] #28 Video/GIF frame extraction — deps: #23
+- [x] #28 Video/GIF frame extraction — deps: #23
 - [ ] #29 Moderation decision logic — deps: #7, #26, #28
 - [ ] #30 Sender state transitions — deps: #7, #29
 
