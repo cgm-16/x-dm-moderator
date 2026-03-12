@@ -38,7 +38,7 @@ PYPROJECT_PATH = Path(__file__).resolve().parents[1] / "pyproject.toml"
 WEBHOOK_PATH = "/webhooks/x"
 
 
-BodyLimitExceededHandler = Callable[[Scope], Awaitable[None]]
+BodyLimitExceededHandler = Callable[[Scope, bytes], Awaitable[None]]
 
 
 class RequestBodyLimitMiddleware:
@@ -59,6 +59,7 @@ class RequestBodyLimitMiddleware:
 
         buffered_messages: list[Message] = []
         consumed_bytes = 0
+        buffered_body = bytearray()
 
         while True:
             message = await receive()
@@ -67,10 +68,14 @@ class RequestBodyLimitMiddleware:
                 buffered_messages.append(message)
                 break
 
-            consumed_bytes += len(message.get("body", b""))
+            body = message.get("body", b"")
+            if isinstance(body, bytes):
+                buffered_body.extend(body)
+                consumed_bytes += len(body)
+
             if consumed_bytes > self.max_body_bytes:
                 if self.on_limit_exceeded is not None:
-                    await self.on_limit_exceeded(scope)
+                    await self.on_limit_exceeded(scope, bytes(buffered_body))
                 response = JSONResponse(
                     {"detail": "Request body too large"},
                     status_code=413,
@@ -340,9 +345,10 @@ def create_app(
     app.add_middleware(
         RequestBodyLimitMiddleware,
         max_body_bytes=MAX_REQUEST_BODY_BYTES,
-        on_limit_exceeded=lambda scope: _persist_oversized_webhook_request(
+        on_limit_exceeded=lambda scope, raw_body: _persist_oversized_webhook_request(
             app_db_path,
             scope,
+            raw_body,
         ),
     )
 
@@ -384,7 +390,18 @@ def create_app(
             )
             raise HTTPException(status_code=400, detail="Invalid JSON")
 
-        for event_id, sender_id, event in _extract_message_create_events(payload):
+        message_create_events = _extract_message_create_events(payload)
+        if not message_create_events:
+            await _persist_rejected_request(
+                app_db_path,
+                path=WEBHOOK_PATH,
+                reason="unsupported_shape",
+                remote_ip=_request_client_host(request),
+                body_sha256=_sha256_hex(raw_body),
+            )
+            return Response(status_code=200)
+
+        for event_id, sender_id, event in message_create_events:
             await _enqueue_event(
                 app_db_path,
                 event_id=event_id,
@@ -405,7 +422,11 @@ def create_app(
     return app
 
 
-async def _persist_oversized_webhook_request(db_path: Path, scope: Scope) -> None:
+async def _persist_oversized_webhook_request(
+    db_path: Path,
+    scope: Scope,
+    raw_body: bytes,
+) -> None:
     path = scope.get("path")
     if path != WEBHOOK_PATH:
         return
@@ -416,6 +437,7 @@ async def _persist_oversized_webhook_request(db_path: Path, scope: Scope) -> Non
         path=WEBHOOK_PATH,
         reason="oversized",
         remote_ip=_scope_client_host(scope),
+        body_sha256=_sha256_hex(raw_body),
     )
 
 

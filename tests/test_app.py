@@ -328,12 +328,23 @@ def test_webhook_post_rejects_bad_signature_and_persists_request(
     rejected_rows = run(
         fetch_all_rows(
             db_path,
-            "SELECT path, reason FROM rejected_requests ORDER BY id ASC",
+            """
+            SELECT remote_ip, path, reason, body_sha256
+            FROM rejected_requests
+            ORDER BY id ASC
+            """,
         )
     )
 
     assert response.status_code == 403
-    assert rejected_rows == [("/webhooks/x", "bad_signature")]
+    assert rejected_rows == [
+        (
+            "testclient",
+            "/webhooks/x",
+            "bad_signature",
+            hashlib.sha256(raw_body).hexdigest(),
+        )
+    ]
 
 
 def test_webhook_post_rejects_oversized_body_and_persists_request(
@@ -354,12 +365,18 @@ def test_webhook_post_rejects_oversized_body_and_persists_request(
     rejected_rows = run(
         fetch_all_rows(
             db_path,
-            "SELECT path, reason FROM rejected_requests ORDER BY id ASC",
+            """
+            SELECT remote_ip, path, reason, body_sha256
+            FROM rejected_requests
+            ORDER BY id ASC
+            """,
         )
     )
 
     assert response.status_code == 413
-    assert rejected_rows == [("/webhooks/x", "oversized")]
+    assert rejected_rows == [
+        ("testclient", "/webhooks/x", "oversized", hashlib.sha256(raw_body).hexdigest())
+    ]
 
 
 def test_webhook_post_rejects_invalid_json_and_persists_request(tmp_path: Path) -> None:
@@ -378,12 +395,23 @@ def test_webhook_post_rejects_invalid_json_and_persists_request(tmp_path: Path) 
     rejected_rows = run(
         fetch_all_rows(
             db_path,
-            "SELECT path, reason FROM rejected_requests ORDER BY id ASC",
+            """
+            SELECT remote_ip, path, reason, body_sha256
+            FROM rejected_requests
+            ORDER BY id ASC
+            """,
         )
     )
 
     assert response.status_code == 400
-    assert rejected_rows == [("/webhooks/x", "invalid_json")]
+    assert rejected_rows == [
+        (
+            "testclient",
+            "/webhooks/x",
+            "invalid_json",
+            hashlib.sha256(raw_body).hexdigest(),
+        )
+    ]
 
 
 def test_webhook_post_rejects_invalid_utf8_json_and_persists_request(
@@ -404,12 +432,23 @@ def test_webhook_post_rejects_invalid_utf8_json_and_persists_request(
     rejected_rows = run(
         fetch_all_rows(
             db_path,
-            "SELECT path, reason FROM rejected_requests ORDER BY id ASC",
+            """
+            SELECT remote_ip, path, reason, body_sha256
+            FROM rejected_requests
+            ORDER BY id ASC
+            """,
         )
     )
 
     assert response.status_code == 400
-    assert rejected_rows == [("/webhooks/x", "invalid_json")]
+    assert rejected_rows == [
+        (
+            "testclient",
+            "/webhooks/x",
+            "invalid_json",
+            hashlib.sha256(raw_body).hexdigest(),
+        )
+    ]
 
 
 def test_webhook_post_bootstraps_schema_before_first_write(tmp_path: Path) -> None:
@@ -603,7 +642,7 @@ def test_webhook_post_skips_duplicate_event_id_without_duplicate_job(
     assert job_count == [(1,)]
 
 
-def test_webhook_post_ignores_signed_unsupported_payload_shape(
+def test_webhook_post_persists_signed_unsupported_payload_shape(
     tmp_path: Path,
 ) -> None:
     consumer_secret = "consumer-secret"
@@ -622,7 +661,25 @@ def test_webhook_post_ignores_signed_unsupported_payload_shape(
 
     event_count = run(fetch_all_rows(db_path, "SELECT COUNT(*) FROM webhook_events"))
     job_count = run(fetch_all_rows(db_path, "SELECT COUNT(*) FROM jobs"))
+    rejected_rows = run(
+        fetch_all_rows(
+            db_path,
+            """
+            SELECT remote_ip, path, reason, body_sha256
+            FROM rejected_requests
+            ORDER BY id ASC
+            """,
+        )
+    )
 
     assert response.status_code == 200
     assert event_count == [(0,)]
     assert job_count == [(0,)]
+    assert rejected_rows == [
+        (
+            "testclient",
+            "/webhooks/x",
+            "unsupported_shape",
+            hashlib.sha256(raw_body).hexdigest(),
+        )
+    ]

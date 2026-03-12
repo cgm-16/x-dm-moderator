@@ -111,7 +111,7 @@ Project: X DM Image Safety Filter Prototype (v0.1)
 - [x] Implement signature verification
 - [x] Implement idempotent enqueue by `event_id`
 - [x] Implement trimmed event persistence
-- [ ] Implement rejected request persistence
+- [x] Implement rejected request persistence
 
 ---
 
