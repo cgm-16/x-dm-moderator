@@ -166,3 +166,41 @@ def test_cleanup_media_warns_for_missing_files_and_does_not_raise(
         media_download.cleanup_media([missing_path])
 
     assert caplog.messages == [f"temporary media file already missing: {missing_path}"]
+
+
+def test_download_media_raises_for_item_with_no_downloadable_url() -> None:
+    item = MediaItem(
+        media_key="3_9",
+        type="photo",
+        # no url, no variants
+    )
+
+    async def handler(request: httpx.Request) -> httpx.Response:
+        raise AssertionError("should not make an HTTP request")
+
+    with pytest.raises(ValueError, match="3_9"):
+        run(download_item(item, transport=httpx.MockTransport(handler)))
+
+
+def test_download_media_raises_xapierror_on_http_error(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    import dmguard.media_download as media_download
+    from dmguard.x_client import XApiError
+
+    download_dir = tmp_path / "downloads"
+    photo = MediaItem(
+        media_key="3_1",
+        type="photo",
+        url="https://media.example.com/path/photo.jpg",
+    )
+
+    async def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(403, content=b"forbidden")
+
+    monkeypatch.setattr(media_download, "TMP_DIR", download_dir)
+
+    with pytest.raises(XApiError) as exc_info:
+        run(download_item(photo, transport=httpx.MockTransport(handler)))
+
+    assert exc_info.value.status_code == 403
