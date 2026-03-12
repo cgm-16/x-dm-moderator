@@ -70,7 +70,6 @@ def test_recover_stale_jobs_resets_stale_rows_and_logs_each_recovery(
     )
 
     logger, stream = build_logger("dmguard.test.recovery")
-    monkeypatch.setattr(recovery, "_utc_now", lambda: "2026-03-11T10:00:00Z")
     monkeypatch.setattr(scheduler, "_utc_now", lambda: "2026-03-11T10:00:00Z")
 
     async def scenario() -> int:
@@ -123,7 +122,6 @@ def test_recover_stale_jobs_is_noop_without_stale_rows(
     )
 
     logger, stream = build_logger("dmguard.test.recovery.noop")
-    monkeypatch.setattr(recovery, "_utc_now", lambda: "2026-03-11T10:00:00Z")
     monkeypatch.setattr(scheduler, "_utc_now", lambda: "2026-03-11T10:00:00Z")
 
     async def scenario() -> int:

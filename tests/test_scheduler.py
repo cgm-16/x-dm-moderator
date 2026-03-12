@@ -421,24 +421,24 @@ def test_reset_stale_jobs_resets_only_rows_older_than_threshold(
     )
     monkeypatch.setattr(scheduler, "_utc_now", lambda: "2026-03-11T10:00:00Z")
 
-    async def scenario() -> int:
+    async def scenario() -> list[dict[str, object]]:
         from dmguard.db import get_connection
 
         async with get_connection(db_path) as connection:
-            reset_count = await scheduler.reset_stale_jobs(
+            reset_jobs = await scheduler.reset_stale_jobs(
                 connection,
                 stale_threshold_minutes=30,
             )
             await connection.commit()
-            return reset_count
+            return reset_jobs
 
-    reset_count = run(scenario())
+    reset_jobs = run(scenario())
     stale_job = run(fetch_job(db_path, stale_job_id))
     threshold_job = run(fetch_job(db_path, threshold_job_id))
     fresh_job = run(fetch_job(db_path, fresh_job_id))
     queued_job = run(fetch_job(db_path, queued_job_id))
 
-    assert reset_count == 1
+    assert len(reset_jobs) == 1
     assert stale_job is not None
     assert stale_job["status"] == JobStatus.queued.value
     assert stale_job["stage"] == JobStage.download_media.value
