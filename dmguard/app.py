@@ -67,9 +67,8 @@ class RequestBodyLimitMiddleware:
                 break
 
             body = message.get("body", b"")
-            if isinstance(body, bytes):
-                buffered_body.extend(body)
-                consumed_bytes += len(body)
+            buffered_body.extend(body)
+            consumed_bytes += len(body)
 
             if consumed_bytes > self.max_body_bytes:
                 if self.on_limit_exceeded is not None:
