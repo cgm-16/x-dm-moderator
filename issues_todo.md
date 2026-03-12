@@ -32,7 +32,7 @@ GitHub repo: https://github.com/cgm-16/x-dm-moderator
 
 ## Milestone 4 — FastAPI Lifecycle
 
-- [ ] #11 Stale processing recovery — deps: #7, #10
+- [x] #11 Stale processing recovery — deps: #7, #10
 - [ ] #12 Worker loop + FastAPI lifespan — deps: #9, #11
 - [ ] #13 /health aggregation — deps: #7, #12
 - [x] #14 /version endpoint — deps: #4
