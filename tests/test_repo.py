@@ -301,6 +301,62 @@ def test_repo_senders_insert_and_read_tables(tmp_path: Path) -> None:
     }
 
 
+def test_repo_senders_delete_rows(tmp_path: Path) -> None:
+    db_path = tmp_path / "state.db"
+
+    run(bootstrap_database(db_path))
+
+    async def scenario() -> tuple[
+        dict[str, object] | None,
+        dict[str, object] | None,
+        dict[str, object] | None,
+    ]:
+        from dmguard.db import get_connection
+        from dmguard.repo_senders import (
+            delete_allowed_sender,
+            delete_block_failed_sender,
+            delete_blocked_sender,
+            get_allowed_sender,
+            get_block_failed_sender,
+            get_blocked_sender,
+            insert_allowed_sender,
+            insert_blocked_sender,
+            upsert_block_failed_sender,
+        )
+
+        async with get_connection(db_path) as connection:
+            await insert_allowed_sender(
+                connection,
+                sender_id="sender-1",
+                source_event_id="event-1",
+            )
+            await insert_blocked_sender(
+                connection,
+                sender_id="sender-2",
+                source_event_id="event-2",
+            )
+            await upsert_block_failed_sender(
+                connection,
+                sender_id="sender-2",
+                next_retry_at="2026-03-12T00:00:00Z",
+            )
+            await delete_allowed_sender(connection, "sender-1")
+            await delete_blocked_sender(connection, "sender-2")
+            await delete_block_failed_sender(connection, "sender-2")
+            await connection.commit()
+            return (
+                await get_allowed_sender(connection, "sender-1"),
+                await get_blocked_sender(connection, "sender-2"),
+                await get_block_failed_sender(connection, "sender-2"),
+            )
+
+    allowed_sender, blocked_sender, block_failed_sender = run(scenario())
+
+    assert allowed_sender is None
+    assert blocked_sender is None
+    assert block_failed_sender is None
+
+
 def test_repo_audit_rejected_and_kv_write_expected_rows(tmp_path: Path) -> None:
     db_path = tmp_path / "state.db"
 
