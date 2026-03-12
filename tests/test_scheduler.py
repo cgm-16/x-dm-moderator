@@ -261,9 +261,9 @@ def test_complete_job_rejects_non_terminal_status(tmp_path: Path) -> None:
 @pytest.mark.parametrize(
     ("attempt", "expected_next_run_at"),
     [
-        (0, "2026-03-11T10:00:10Z"),
-        (1, "2026-03-11T10:01:00Z"),
-        (2, "2026-03-11T10:05:00Z"),
+        (1, "2026-03-11T10:00:10Z"),
+        (2, "2026-03-11T10:01:00Z"),
+        (3, "2026-03-11T10:05:00Z"),
     ],
 )
 def test_schedule_retry_sets_expected_backoff(
@@ -285,7 +285,7 @@ def test_schedule_retry_sets_expected_backoff(
             next_run_at="2026-03-11T09:59:00Z",
             status=JobStatus.processing,
             stage=JobStage.classify,
-            attempt=0,
+            attempt=attempt,
             processing_started_at="2026-03-11T09:59:00Z",
         )
     )

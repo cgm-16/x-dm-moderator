@@ -1,6 +1,7 @@
 from collections.abc import Awaitable, Callable
+import asyncio
 import base64
-from contextlib import asynccontextmanager
+from contextlib import asynccontextmanager, suppress
 from datetime import datetime, timezone
 import hashlib
 import hmac
@@ -27,6 +28,7 @@ from dmguard.repo_rejected import insert_rejected_request
 from dmguard.schema import bootstrap_schema
 from dmguard.secrets import FileSecretStore, SecretStore
 from dmguard.webhook_auth import verify_x_signature
+from dmguard.worker import worker_loop
 
 
 APP_VERSION = "0.1.0"
@@ -304,7 +306,28 @@ def create_app(
             await bootstrap_schema(connection)
             await recover_stale_jobs(connection, app_logger)
             await connection.commit()
-        yield
+
+        async def dispatch_fn(job: dict[str, object]) -> None:
+            app_logger.info(
+                "Placeholder dispatch job_id=%s event_id=%s",
+                job["job_id"],
+                job["event_id"],
+            )
+
+        task = asyncio.create_task(
+            worker_loop(
+                app_db_path,
+                dispatch_fn,
+                logger=app_logger,
+            )
+        )
+
+        try:
+            yield
+        finally:
+            task.cancel()
+            with suppress(asyncio.CancelledError):
+                await task
 
     app = FastAPI(
         docs_url=docs_url,

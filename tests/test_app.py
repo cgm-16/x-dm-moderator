@@ -1,3 +1,4 @@
+import asyncio
 import base64
 import hashlib
 import hmac
@@ -6,6 +7,7 @@ import json
 import logging
 from pathlib import Path
 import platform
+import threading
 import tomllib
 
 from fastapi import Request
@@ -101,6 +103,59 @@ def test_create_app_recovers_stale_jobs_on_startup(
         pass
 
     assert calls == [(db_path, "dmguard")]
+
+
+def test_create_app_starts_worker_loop_and_cancels_on_shutdown(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    import dmguard.app as app_module
+
+    db_path = tmp_path / "state.db"
+    run(bootstrap_database(db_path))
+
+    calls: list[tuple[str, Path, str]] = []
+    worker_started = threading.Event()
+    worker_cancelled = threading.Event()
+
+    async def fake_recover_stale_jobs(connection, logger: logging.Logger) -> int:
+        pragma = "pragma database_list"
+        rows = await connection.execute_fetchall(pragma)
+        calls.append(("recover", Path(rows[0][2]), logger.name))
+        return 0
+
+    async def fake_worker_loop(
+        db_path_arg: Path,
+        dispatch_fn,
+        *,
+        poll_interval_seconds: float = 5,
+        logger: logging.Logger | None = None,
+    ) -> None:
+        assert callable(dispatch_fn)
+        assert poll_interval_seconds == 5
+        assert logger is not None
+        calls.append(("worker", db_path_arg, logger.name))
+        worker_started.set()
+
+        try:
+            await asyncio.Event().wait()
+        except asyncio.CancelledError:
+            worker_cancelled.set()
+            raise
+
+    monkeypatch.setattr(app_module, "recover_stale_jobs", fake_recover_stale_jobs)
+    monkeypatch.setattr(app_module, "worker_loop", fake_worker_loop)
+
+    app = app_module.create_app(build_config(), db_path=db_path)
+
+    with TestClient(app):
+        assert worker_started.wait(timeout=1)
+
+    assert worker_cancelled.wait(timeout=1)
+    assert calls == [
+        ("recover", db_path, "dmguard"),
+        ("worker", db_path, "dmguard"),
+    ]
 
 
 def test_health_endpoint_returns_ok_payload() -> None:
