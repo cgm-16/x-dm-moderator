@@ -55,6 +55,7 @@ DEFAULT_WARMUP_CLASSIFIER_CMD = (
     *CLASSIFIER_FAKE_BASE_CMD,
     "--force-safe",
 )
+_SELFTEST_UNSAFE_THRESHOLD = 0.9
 SETUP_CONFIG_DEFAULTS = {
     "debug": False,
     "log_level": "INFO",
@@ -310,9 +311,6 @@ def handle_allowlist(args) -> int:
 
 
 def handle_blockstate(args) -> int:
-    if args.blockstate_command != "remove":
-        raise ValueError(f"Unknown blockstate command: {args.blockstate_command}")
-
     asyncio.run(_clear_blockstate(args.user_id))
     print(f"removed local blockstate sender {args.user_id}")
     return 0
@@ -320,8 +318,6 @@ def handle_blockstate(args) -> int:
 
 def handle_selftest(args) -> int:
     target_path = args.image or args.video
-    if target_path is None:
-        raise ValueError("selftest requires --image or --video")
     if not target_path.exists():
         raise ValueError(f"Selftest path does not exist: {target_path}")
     if not target_path.is_file():
@@ -342,7 +338,7 @@ def handle_selftest(args) -> int:
         },
         classifier_cmd,
     )
-    outcome = "unsafe" if response.yes_prob >= 0.9 else "safe"
+    outcome = "unsafe" if response.yes_prob >= _SELFTEST_UNSAFE_THRESHOLD else "safe"
 
     print(f"result={outcome} file={target_path} yes_prob={response.yes_prob:.2f}")
     if response.trigger_frame_index is not None:
@@ -357,7 +353,7 @@ def handle_readycheck() -> int:
     checks = [
         _build_check_result("db reachable", asyncio.run(_check_db_reachable())),
         _build_check_result("secrets loadable", _check_secrets_loadable()),
-        _build_check_result("worker running", _check_worker_running()),
+        _build_check_result("worker running", _check_app_service_done()),
     ]
 
     for check in checks:
@@ -481,7 +477,7 @@ def _check_secrets_loadable() -> tuple[bool, str | None]:
     return True, None
 
 
-def _check_worker_running() -> tuple[bool, str | None]:
+def _check_app_service_done() -> tuple[bool, str | None]:
     state = load_setup_state(SETUP_STATE_PATH)
     if state is None:
         return False, "setup state missing"
