@@ -27,9 +27,9 @@ def test_next_stage_returns_expected_stage(
 @pytest.mark.parametrize(
     ("attempt", "expected"),
     [
-        (0, 10),
-        (1, 60),
-        (2, 300),
+        (1, 10),
+        (2, 60),
+        (3, 300),
     ],
 )
 def test_next_backoff_seconds_returns_expected_value(
@@ -38,7 +38,7 @@ def test_next_backoff_seconds_returns_expected_value(
     assert next_backoff_seconds(attempt) == expected
 
 
-@pytest.mark.parametrize("attempt", [3, 4])
+@pytest.mark.parametrize("attempt", [0, 4, 5])
 def test_next_backoff_seconds_raises_after_max_retries(attempt: int) -> None:
     with pytest.raises(ValueError):
         next_backoff_seconds(attempt)

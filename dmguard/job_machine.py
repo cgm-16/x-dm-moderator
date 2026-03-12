@@ -23,9 +23,9 @@ _NEXT_STAGE = {
 }
 
 _BACKOFF_SECONDS = {
-    0: 10,
-    1: 60,
-    2: 300,
+    1: 10,
+    2: 60,
+    3: 300,
 }
 
 _TERMINAL_STATUSES = {
