@@ -53,7 +53,7 @@ GitHub repo: https://github.com/cgm-16/x-dm-moderator
 ## Milestone 7 — Media Pipeline
 
 - [x] #22 Attachment dispatch — deps: #21
-- [ ] #23 Media download + temp file lifecycle — deps: #20, #22
+- [x] #23 Media download + temp file lifecycle — deps: #20, #22
 - [ ] #24 Video/GIF size cap + preview fallback — deps: #23
 
 ## Milestone 8 — Classifier
