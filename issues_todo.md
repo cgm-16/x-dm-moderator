@@ -66,7 +66,7 @@ GitHub repo: https://github.com/cgm-16/x-dm-moderator
 ## Milestone 9 — Moderation Engine
 
 - [x] #28 Video/GIF frame extraction — deps: #23
-- [ ] #29 Moderation decision logic (rating == "unsafe" + category O2) — deps: #7, #26, #28
+- [x] #29 Moderation decision logic (rating == "unsafe" + category O2) — deps: #7, #26, #28
 - [ ] #30 Sender state transitions — deps: #7, #29
 
 ## Milestone 10 — Audit + Pruning
