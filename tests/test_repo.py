@@ -383,9 +383,9 @@ def test_repo_audit_rejected_and_kv_write_expected_rows(tmp_path: Path) -> None:
                 event_id="event-1",
                 sender_id="sender-1",
                 outcome="safe",
-                policy="violence_gore",
-                threshold=0.9,
-                score=0.01,
+                policy="O2_violence_harm_cruelty",
+                category_code="NA: None applying",
+                rationale="All frames safe",
                 trigger_frame_index=None,
                 trigger_time_sec=None,
                 block_attempted=False,
@@ -428,7 +428,7 @@ def test_repo_audit_rejected_and_kv_write_expected_rows(tmp_path: Path) -> None:
         fetch_row(
             db_path,
             """
-            SELECT id, job_id, event_id, sender_id, outcome, policy, threshold, score, block_attempted
+            SELECT id, job_id, event_id, sender_id, outcome, policy, category_code, rationale, block_attempted
             FROM moderation_audit
             WHERE id = ?
             """,
@@ -462,9 +462,9 @@ def test_repo_audit_rejected_and_kv_write_expected_rows(tmp_path: Path) -> None:
         "event-1",
         "sender-1",
         "safe",
-        "violence_gore",
-        0.9,
-        0.01,
+        "O2_violence_harm_cruelty",
+        "NA: None applying",
+        "All frames safe",
         0,
     )
     assert error_row == (
