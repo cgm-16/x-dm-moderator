@@ -357,6 +357,143 @@ def test_repo_senders_delete_rows(tmp_path: Path) -> None:
     assert block_failed_sender is None
 
 
+def test_repo_senders_issue_30_allowlist_and_block_queries(tmp_path: Path) -> None:
+    db_path = tmp_path / "state.db"
+
+    run(bootstrap_database(db_path))
+
+    async def scenario() -> tuple[bool, bool, bool, bool]:
+        from dmguard.db import get_connection
+        from dmguard.repo_senders import (
+            add_to_allowlist,
+            is_allowlisted,
+            is_blocked,
+            record_block_success,
+        )
+
+        async with get_connection(db_path) as connection:
+            await add_to_allowlist(
+                connection,
+                sender_id="sender-1",
+                source_event_id="event-1",
+            )
+            await record_block_success(
+                connection,
+                sender_id="sender-2",
+                source_event_id="event-2",
+            )
+            await connection.commit()
+            return (
+                await is_allowlisted(connection, "sender-1"),
+                await is_allowlisted(connection, "sender-missing"),
+                await is_blocked(connection, "sender-2"),
+                await is_blocked(connection, "sender-missing"),
+            )
+
+    allowlisted, missing_allowlisted, blocked, missing_blocked = run(scenario())
+
+    assert allowlisted is True
+    assert missing_allowlisted is False
+    assert blocked is True
+    assert missing_blocked is False
+
+
+def test_repo_senders_issue_30_record_block_failure_sets_cooldown(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    db_path = tmp_path / "state.db"
+
+    run(bootstrap_database(db_path))
+
+    from dmguard import repo_senders
+
+    monkeypatch.setattr(repo_senders, "_utc_now", lambda: "2026-03-11T00:00:00Z")
+
+    async def record_failure() -> tuple[dict[str, object] | None, bool]:
+        from dmguard.db import get_connection
+        from dmguard.repo_senders import (
+            get_block_failed,
+            is_block_on_cooldown,
+            record_block_failure,
+        )
+
+        async with get_connection(db_path) as connection:
+            await record_block_failure(connection, "sender-3")
+            await connection.commit()
+            return (
+                await get_block_failed(connection, "sender-3"),
+                await is_block_on_cooldown(connection, "sender-3"),
+            )
+
+    row, on_cooldown = run(record_failure())
+
+    monkeypatch.setattr(repo_senders, "_utc_now", lambda: "2026-03-12T00:00:01Z")
+
+    async def check_cooldown() -> bool:
+        from dmguard.db import get_connection
+        from dmguard.repo_senders import is_block_on_cooldown
+
+        async with get_connection(db_path) as connection:
+            return await is_block_on_cooldown(connection, "sender-3")
+
+    cooldown_expired = run(check_cooldown())
+
+    assert row == {
+        "sender_id": "sender-3",
+        "first_failed_at": "2026-03-11T00:00:00Z",
+        "last_failed_at": "2026-03-11T00:00:00Z",
+        "next_retry_at": "2026-03-12T00:00:00Z",
+        "fail_count": 1,
+    }
+    assert on_cooldown is True
+    assert cooldown_expired is False
+
+
+def test_repo_senders_issue_30_record_block_failure_upserts_existing_row(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    db_path = tmp_path / "state.db"
+
+    run(bootstrap_database(db_path))
+
+    from dmguard import repo_senders
+
+    first_failure_at = "2026-03-11T00:00:00Z"
+    second_failure_at = "2026-03-11T12:00:00Z"
+    monkeypatch.setattr(repo_senders, "_utc_now", lambda: first_failure_at)
+
+    async def first_failure() -> None:
+        from dmguard.db import get_connection
+        from dmguard.repo_senders import record_block_failure
+
+        async with get_connection(db_path) as connection:
+            await record_block_failure(connection, "sender-4")
+            await connection.commit()
+
+    run(first_failure())
+
+    monkeypatch.setattr(repo_senders, "_utc_now", lambda: second_failure_at)
+
+    async def second_failure() -> dict[str, object] | None:
+        from dmguard.db import get_connection
+        from dmguard.repo_senders import get_block_failed, record_block_failure
+
+        async with get_connection(db_path) as connection:
+            await record_block_failure(connection, "sender-4")
+            await connection.commit()
+            return await get_block_failed(connection, "sender-4")
+
+    row = run(second_failure())
+
+    assert row == {
+        "sender_id": "sender-4",
+        "first_failed_at": first_failure_at,
+        "last_failed_at": second_failure_at,
+        "next_retry_at": "2026-03-12T12:00:00Z",
+        "fail_count": 2,
+    }
+
+
 def test_repo_audit_rejected_and_kv_write_expected_rows(tmp_path: Path) -> None:
     db_path = tmp_path / "state.db"
 
