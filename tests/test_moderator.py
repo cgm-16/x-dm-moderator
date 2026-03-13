@@ -169,8 +169,11 @@ def test_moderate_job_marks_safe_media_and_adds_sender_to_allowlist(
                     object(),
                     ["classifier-fake"],
                 )
-                sender_row = await get_allowed_sender(connection, "sender-1")
-                return outcome, sender_row
+
+            async with get_connection(db_path) as fresh_connection:
+                sender_row = await get_allowed_sender(fresh_connection, "sender-1")
+
+            return outcome, sender_row
 
         outcome, sender_row = run(scenario())
     finally:
@@ -384,3 +387,117 @@ def test_moderate_job_propagates_classifier_failure_and_cleans_up_temp_files(
         monkeypatch.undo()
 
     assert not download_path.exists()
+
+
+def test_moderate_job_skips_early_allowlist_check_when_job_has_no_sender_id(
+    tmp_path: Path,
+) -> None:
+    import dmguard.moderator as moderator
+
+    db_path = tmp_path / "state.db"
+    run(bootstrap_database(db_path))
+
+    async def fake_fetch_dm_event(*_args, **_kwargs) -> DMEvent:
+        return build_event()
+
+    monkeypatch = pytest.MonkeyPatch()
+    monkeypatch.setattr(moderator, "fetch_dm_event", fake_fetch_dm_event)
+    try:
+
+        async def scenario() -> moderator.ModerationOutcome:
+            from dmguard.db import get_connection
+
+            async with get_connection(db_path) as connection:
+                return await moderator.moderate_job(
+                    build_job(sender_id=None),
+                    connection,
+                    object(),
+                    ["classifier-fake"],
+                )
+
+        outcome = run(scenario())
+    finally:
+        monkeypatch.undo()
+
+    assert outcome.outcome == "text_only_logged"
+
+
+def test_moderate_job_marks_safe_video_and_adds_sender_to_allowlist(
+    tmp_path: Path,
+) -> None:
+    import dmguard.moderator as moderator
+
+    db_path = tmp_path / "state.db"
+    run(bootstrap_database(db_path))
+    video_path = tmp_path / "clip.mp4"
+    frame_one_path = tmp_path / "frame-1.jpg"
+    frame_two_path = tmp_path / "frame-2.jpg"
+
+    video = MediaItem(
+        media_key="3_2",
+        type="video",
+        preview_image_url="https://example.com/video.jpg",
+    )
+
+    async def fake_fetch_dm_event(*_args, **_kwargs) -> DMEvent:
+        return build_event(video)
+
+    async def fake_download_media(*_args, **_kwargs) -> Path:
+        video_path.write_bytes(b"video-bytes")
+        return video_path
+
+    def fake_extract_frames(*_args, **_kwargs) -> list[FrameInfo]:
+        frame_one_path.write_bytes(b"frame-1")
+        frame_two_path.write_bytes(b"frame-2")
+        return [
+            FrameInfo(path=frame_one_path, time_sec=1.0, index=0),
+            FrameInfo(path=frame_two_path, time_sec=2.0, index=1),
+        ]
+
+    def fake_run_classifier(*_args, **_kwargs) -> ClassifierResponse:
+        return build_response(
+            rating="safe",
+            category="NA: None applying",
+            rationale="no violence found",
+        )
+
+    monkeypatch = pytest.MonkeyPatch()
+    monkeypatch.setattr(moderator, "fetch_dm_event", fake_fetch_dm_event)
+    monkeypatch.setattr(moderator, "download_media", fake_download_media)
+    monkeypatch.setattr(moderator, "extract_frames", fake_extract_frames)
+    monkeypatch.setattr(moderator, "run_classifier", fake_run_classifier)
+    try:
+
+        async def scenario() -> tuple[
+            moderator.ModerationOutcome, dict[str, object] | None
+        ]:
+            from dmguard.db import get_connection
+            from dmguard.repo_senders import get_allowed_sender
+
+            async with get_connection(db_path) as connection:
+                outcome = await moderator.moderate_job(
+                    build_job(),
+                    connection,
+                    object(),
+                    ["classifier-fake"],
+                )
+
+            async with get_connection(db_path) as fresh_connection:
+                sender_row = await get_allowed_sender(fresh_connection, "sender-1")
+
+            return outcome, sender_row
+
+        outcome, sender_row = run(scenario())
+    finally:
+        monkeypatch.undo()
+
+    assert outcome.outcome == "safe"
+    assert outcome.category_code == "NA: None applying"
+    assert outcome.rationale == "no violence found"
+    assert outcome.block_attempted is False
+    assert sender_row is not None
+    assert sender_row["sender_id"] == "sender-1"
+    assert sender_row["source_event_id"] == "event-1"
+    assert not video_path.exists()
+    assert not frame_one_path.exists()
+    assert not frame_two_path.exists()

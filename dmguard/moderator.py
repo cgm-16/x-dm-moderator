@@ -1,3 +1,4 @@
+import asyncio
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 import logging
@@ -100,7 +101,7 @@ async def moderate_job(
                     safe_response = frame_safe_response
                 continue
 
-            response = _classify_path(downloaded_path, classifier_cmd)
+            response = await _classify_path(downloaded_path, classifier_cmd)
             if _is_unsafe(response):
                 return await _blocked_or_error_outcome(
                     event,
@@ -126,6 +127,7 @@ async def moderate_job(
             sender_id=event.sender_id,
             source_event_id=event.event_id,
         )
+        await connection.commit()
 
     return ModerationOutcome(
         outcome="safe",
@@ -143,7 +145,7 @@ async def _classify_frames(
     safe_response: ClassifierResponse | None = None
 
     for frame in frames:
-        response = _classify_path(frame.path, classifier_cmd)
+        response = await _classify_path(frame.path, classifier_cmd)
         if _is_unsafe(response):
             return (
                 await _blocked_or_error_outcome(
@@ -163,11 +165,12 @@ async def _classify_frames(
     return None, safe_response
 
 
-def _classify_path(
+async def _classify_path(
     path: Path,
     classifier_cmd: Sequence[str],
 ) -> ClassifierResponse:
-    return run_classifier(
+    return await asyncio.to_thread(
+        run_classifier,
         {
             "mode": "image",
             "files": [str(path)],
