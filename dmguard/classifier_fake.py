@@ -20,16 +20,21 @@ def build_parser() -> ArgumentParser:
 def build_response(input_path: Path, *, force_unsafe: bool) -> ClassifierResponse:
     request = load_classifier_request(input_path)
 
-    response = ClassifierResponse(
+    if force_unsafe:
+        return ClassifierResponse(
+            policy=request.policy,
+            rating="unsafe",
+            category="O2: Violence, Harm, or Cruelty",
+            rationale="Forced unsafe for testing",
+            trigger_index=0,
+        )
+
+    return ClassifierResponse(
         policy=request.policy,
-        yes_prob=0.99 if force_unsafe else 0.01,
+        rating="safe",
+        category="NA: None applying",
+        rationale="Forced safe for testing",
     )
-
-    if request.mode == "video" and force_unsafe:
-        response.trigger_frame_index = 0
-        response.trigger_time_sec = 1.0
-
-    return response
 
 
 def main(argv: Sequence[str] | None = None) -> int:
