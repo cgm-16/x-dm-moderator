@@ -420,7 +420,13 @@ def test_warmup_invokes_setup_warmup(
 
     def fake_run_setup_warmup() -> dict[str, object]:
         calls.append("warmup")
-        return {"policy": "violence_gore", "yes_prob": 0.01}
+        return {
+            "policy": "O2_violence_harm_cruelty",
+            "rating": "safe",
+            "category": "NA: None applying",
+            "rationale": "Forced safe for testing",
+            "trigger_index": None,
+        }
 
     monkeypatch.setattr(cli, "run_setup_warmup", fake_run_setup_warmup)
 
@@ -431,8 +437,11 @@ def test_warmup_invokes_setup_warmup(
     assert exit_code == 0
     assert calls == ["warmup"]
     assert json.loads(captured.out) == {
-        "policy": "violence_gore",
-        "yes_prob": 0.01,
+        "policy": "O2_violence_harm_cruelty",
+        "rating": "safe",
+        "category": "NA: None applying",
+        "rationale": "Forced safe for testing",
+        "trigger_index": None,
     }
 
 
@@ -512,8 +521,8 @@ def test_selftest_force_safe_prints_human_readable_result(
 
     assert exit_code == 0
     assert captured.err == ""
-    assert "safe" in captured.out
-    assert "0.01" in captured.out
+    assert "result=safe" in captured.out
+    assert "category=NA: None applying" in captured.out
     assert str(image_path) in captured.out
 
 
@@ -530,9 +539,9 @@ def test_selftest_force_unsafe_video_prints_trigger_info(
 
     assert exit_code == 0
     assert captured.err == ""
-    assert "unsafe" in captured.out
-    assert "trigger_frame_index=0" in captured.out
-    assert "trigger_time_sec=1.0" in captured.out
+    assert "result=unsafe" in captured.out
+    assert "category=O2: Violence, Harm, or Cruelty" in captured.out
+    assert "trigger_index=0" in captured.out
 
 
 def test_selftest_missing_file_fails_with_clear_error(
