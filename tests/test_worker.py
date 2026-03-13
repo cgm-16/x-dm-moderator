@@ -200,3 +200,48 @@ def test_worker_loop_stops_cleanly_on_cancellation(tmp_path: Path) -> None:
             await task
 
     run(scenario())
+
+
+def test_worker_loop_runs_daily_prune_check_when_idle(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from dmguard import worker
+
+    db_path = tmp_path / "state.db"
+    run(bootstrap_database(db_path))
+
+    async def dispatch_fn(_: dict[str, object]) -> None:
+        raise AssertionError("dispatch should not be called without queued jobs")
+
+    async def scenario() -> None:
+        prune_checked = asyncio.Event()
+
+        async def fake_run_daily_prune_if_due(
+            db_path_arg: Path,
+            logger,
+        ) -> None:
+            assert db_path_arg == db_path
+            assert logger.name == "dmguard"
+            prune_checked.set()
+
+        monkeypatch.setattr(
+            worker, "_run_daily_prune_if_due", fake_run_daily_prune_if_due
+        )
+
+        task = asyncio.create_task(
+            worker.worker_loop(
+                db_path,
+                dispatch_fn,
+                poll_interval_seconds=10,
+            )
+        )
+
+        try:
+            await asyncio.wait_for(prune_checked.wait(), timeout=1)
+        finally:
+            task.cancel()
+            with suppress(asyncio.CancelledError):
+                await task
+
+    run(scenario())

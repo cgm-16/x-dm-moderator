@@ -1,8 +1,10 @@
+import io
+import logging
 from pathlib import Path
 
 import pytest
 
-from tests.conftest import bootstrap_database, run
+from tests.conftest import bootstrap_database, clear_logger, run
 
 
 async def count_rows(db_path: Path, table: str) -> int:
@@ -17,6 +19,27 @@ async def count_rows(db_path: Path, table: str) -> int:
             return int(row[0])
         finally:
             await cursor.close()
+
+
+async def fetch_kv_value(db_path: Path, key: str) -> str | None:
+    from dmguard.db import get_connection
+    from dmguard.repo_kv import kv_get
+
+    async with get_connection(db_path) as connection:
+        return await kv_get(connection, key)
+
+
+def build_logger(name: str) -> tuple[logging.Logger, io.StringIO]:
+    stream = io.StringIO()
+    logger = logging.getLogger(name)
+    clear_logger(name)
+
+    handler = logging.StreamHandler(stream)
+    logger.addHandler(handler)
+    logger.setLevel(logging.INFO)
+    logger.propagate = False
+
+    return logger, stream
 
 
 class FakeCursor:
@@ -493,3 +516,144 @@ def test_delete_pruned_webhook_events_chunks_large_batches(
         ("event-1", "event-2", "event-3", "-30 days"),
         ("event-4", "event-5", "-30 days"),
     ]
+
+
+def test_run_daily_prune_if_due_runs_when_last_pruned_is_missing(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from dmguard import pruner
+
+    db_path = tmp_path / "state.db"
+    run(bootstrap_database(db_path))
+
+    calls: list[int] = []
+
+    async def fake_prune_old_data(connection, retention_days: int = 30):
+        del connection
+        calls.append(retention_days)
+        return pruner.PruneResult(
+            job_errors_deleted=1,
+            jobs_deleted=2,
+            webhook_events_deleted=3,
+            moderation_audit_deleted=4,
+            rejected_requests_deleted=5,
+        )
+
+    monkeypatch.setattr(pruner, "_utc_now", lambda: "2026-03-13T12:00:00Z")
+    monkeypatch.setattr(pruner, "prune_old_data", fake_prune_old_data)
+    logger, stream = build_logger("dmguard.test.pruner.daily.missing")
+
+    async def scenario():
+        from dmguard.db import get_connection
+        from dmguard.repo_kv import kv_get
+
+        async with get_connection(db_path) as connection:
+            result = await pruner.run_daily_prune_if_due(connection, logger)
+            stored = await kv_get(connection, "last_pruned_at")
+            await connection.commit()
+            return result, stored
+
+    result, stored = run(scenario())
+
+    assert result == pruner.PruneResult(
+        job_errors_deleted=1,
+        jobs_deleted=2,
+        webhook_events_deleted=3,
+        moderation_audit_deleted=4,
+        rejected_requests_deleted=5,
+    )
+    assert stored == "2026-03-13T12:00:00Z"
+    assert calls == [30]
+    assert (
+        "Daily prune completed "
+        "job_errors_deleted=1 jobs_deleted=2 webhook_events_deleted=3 "
+        "moderation_audit_deleted=4 rejected_requests_deleted=5"
+    ) in stream.getvalue()
+
+    clear_logger("dmguard.test.pruner.daily.missing")
+
+
+def test_run_daily_prune_if_due_runs_when_last_pruned_is_stale(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from dmguard import pruner
+
+    db_path = tmp_path / "state.db"
+    run(bootstrap_database(db_path))
+
+    calls: list[int] = []
+
+    async def fake_prune_old_data(connection, retention_days: int = 30):
+        del connection
+        calls.append(retention_days)
+        return pruner.PruneResult()
+
+    monkeypatch.setattr(pruner, "_utc_now", lambda: "2026-03-13T12:00:01Z")
+    monkeypatch.setattr(pruner, "prune_old_data", fake_prune_old_data)
+    logger, _ = build_logger("dmguard.test.pruner.daily.stale")
+
+    async def scenario():
+        from dmguard.db import get_connection
+        from dmguard.repo_kv import kv_set
+
+        async with get_connection(db_path) as connection:
+            await kv_set(
+                connection,
+                key="last_pruned_at",
+                value="2026-03-12T11:59:59Z",
+                updated_at="2026-03-12T11:59:59Z",
+            )
+            result = await pruner.run_daily_prune_if_due(connection, logger)
+            await connection.commit()
+            return result
+
+    result = run(scenario())
+
+    assert result == pruner.PruneResult()
+    assert calls == [30]
+    assert run(fetch_kv_value(db_path, "last_pruned_at")) == "2026-03-13T12:00:01Z"
+
+    clear_logger("dmguard.test.pruner.daily.stale")
+
+
+def test_run_daily_prune_if_due_skips_when_last_pruned_is_recent(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from dmguard import pruner
+
+    db_path = tmp_path / "state.db"
+    run(bootstrap_database(db_path))
+
+    async def fail_prune_old_data(connection, retention_days: int = 30):
+        del connection, retention_days
+        raise AssertionError("prune should not run when last_pruned_at is recent")
+
+    monkeypatch.setattr(pruner, "_utc_now", lambda: "2026-03-13T12:00:00Z")
+    monkeypatch.setattr(pruner, "prune_old_data", fail_prune_old_data)
+    logger, stream = build_logger("dmguard.test.pruner.daily.recent")
+
+    async def scenario():
+        from dmguard.db import get_connection
+        from dmguard.repo_kv import kv_set
+
+        async with get_connection(db_path) as connection:
+            await kv_set(
+                connection,
+                key="last_pruned_at",
+                value="2026-03-12T12:00:01Z",
+                updated_at="2026-03-12T12:00:01Z",
+            )
+            result = await pruner.run_daily_prune_if_due(connection, logger)
+            await connection.commit()
+            return result
+
+    result = run(scenario())
+
+    assert result is None
+    assert run(fetch_kv_value(db_path, "last_pruned_at")) == "2026-03-12T12:00:01Z"
+    assert stream.getvalue() == ""
+
+    clear_logger("dmguard.test.pruner.daily.recent")

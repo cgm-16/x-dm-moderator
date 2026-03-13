@@ -278,7 +278,7 @@ Project: X DM Image Safety Filter Prototype (v0.1)
 - [x] Prune order is explicit
 - [x] `job_errors` are deleted before terminal jobs
 - [x] Implement prune command/function
-- [ ] Implement daily prune trigger
+- [x] Implement daily prune trigger
 - [x] Add pruning tests
 
 ---
