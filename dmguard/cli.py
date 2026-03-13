@@ -55,7 +55,6 @@ DEFAULT_WARMUP_CLASSIFIER_CMD = (
     *CLASSIFIER_FAKE_BASE_CMD,
     "--force-safe",
 )
-_SELFTEST_UNSAFE_THRESHOLD = 0.9
 SETUP_CONFIG_DEFAULTS = {
     "debug": False,
     "log_level": "INFO",
@@ -334,17 +333,14 @@ def handle_selftest(args) -> int:
         {
             "mode": mode,
             "files": [str(target_path)],
-            "policy": "violence_gore",
+            "policy": "O2_violence_harm_cruelty",
         },
         classifier_cmd,
     )
-    outcome = "unsafe" if response.yes_prob >= _SELFTEST_UNSAFE_THRESHOLD else "safe"
 
-    print(f"result={outcome} file={target_path} yes_prob={response.yes_prob:.2f}")
-    if response.trigger_frame_index is not None:
-        print(f"trigger_frame_index={response.trigger_frame_index}")
-    if response.trigger_time_sec is not None:
-        print(f"trigger_time_sec={response.trigger_time_sec}")
+    print(f"result={response.rating} file={target_path} category={response.category}")
+    if response.trigger_index is not None:
+        print(f"trigger_index={response.trigger_index}")
 
     return 0
 
@@ -371,7 +367,7 @@ def run_setup_warmup() -> dict[str, object]:
         {
             "mode": "image",
             "files": ["warmup.jpg"],
-            "policy": "violence_gore",
+            "policy": "O2_violence_harm_cruelty",
         },
         DEFAULT_WARMUP_CLASSIFIER_CMD,
     )

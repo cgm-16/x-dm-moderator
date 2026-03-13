@@ -69,9 +69,9 @@ def test_run_classifier_returns_parsed_response_logs_stderr_and_cleans_up_input_
             json.dumps(
                 {
                     "policy": request["policy"],
-                    "yes_prob": 0.01,
-                    "trigger_frame_index": None,
-                    "trigger_time_sec": None,
+                    "rating": "safe",
+                    "category": "NA: None applying",
+                    "rationale": "All frames safe",
                 }
             )
         )
@@ -85,7 +85,7 @@ def test_run_classifier_returns_parsed_response_logs_stderr_and_cleans_up_input_
         {
             "mode": "image",
             "files": ["frame-1.jpg"],
-            "policy": "violence_gore",
+            "policy": "O2_violence_harm_cruelty",
         },
         [sys.executable, str(script_path), str(marker_path)],
     )
@@ -94,8 +94,10 @@ def test_run_classifier_returns_parsed_response_logs_stderr_and_cleans_up_input_
     input_path = read_input_path(marker_path)
 
     assert response == ClassifierResponse(
-        policy="violence_gore",
-        yes_prob=0.01,
+        policy="O2_violence_harm_cruelty",
+        rating="safe",
+        category="NA: None applying",
+        rationale="All frames safe",
     )
     assert not input_path.exists()
     assert "classifier warning" in log_path.read_text(encoding="utf-8")
@@ -132,7 +134,7 @@ def test_run_classifier_raises_error_and_cleans_up_input_file_on_non_zero_exit(
             {
                 "mode": "image",
                 "files": ["frame-1.jpg"],
-                "policy": "violence_gore",
+                "policy": "O2_violence_harm_cruelty",
             },
             [sys.executable, str(script_path), str(marker_path)],
         )
@@ -179,7 +181,7 @@ def test_run_classifier_kills_timed_out_process_and_cleans_up_input_file(
             {
                 "mode": "video",
                 "files": ["frame-1.jpg"],
-                "policy": "violence_gore",
+                "policy": "O2_violence_harm_cruelty",
             },
             [sys.executable, str(script_path), str(marker_path), str(completed_path)],
         )
@@ -222,7 +224,7 @@ def test_run_classifier_raises_classifier_error_on_invalid_json_output(
             {
                 "mode": "image",
                 "files": ["frame-1.jpg"],
-                "policy": "violence_gore",
+                "policy": "O2_violence_harm_cruelty",
             },
             [sys.executable, str(script_path), str(marker_path)],
         )
