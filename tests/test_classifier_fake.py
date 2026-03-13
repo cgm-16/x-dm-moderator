@@ -7,7 +7,7 @@ def write_classifier_input(
     *,
     mode: str,
     files: list[str],
-    policy: str = "violence_gore",
+    policy: str = "O2_violence_harm_cruelty",
 ) -> Path:
     input_path = tmp_path / "classifier-input.json"
     input_path.write_text(
@@ -31,12 +31,13 @@ def test_classifier_fake_force_safe_writes_valid_json_to_stdout(
     response = ClassifierResponse.model_validate_json(captured.out)
 
     assert exit_code == 0
-    assert response.yes_prob == 0.01
-    assert response.trigger_frame_index is None
-    assert response.trigger_time_sec is None
+    assert response.rating == "safe"
+    assert response.category == "NA: None applying"
+    assert response.rationale == "Forced safe for testing"
+    assert response.trigger_index is None
 
 
-def test_classifier_fake_force_unsafe_video_includes_trigger_metadata(
+def test_classifier_fake_force_unsafe_returns_trigger_index(
     tmp_path: Path, capsys
 ) -> None:
     from dmguard.classifier_contract import ClassifierResponse
@@ -54,12 +55,13 @@ def test_classifier_fake_force_unsafe_video_includes_trigger_metadata(
     response = ClassifierResponse.model_validate_json(captured.out)
 
     assert exit_code == 0
-    assert response.yes_prob == 0.99
-    assert response.trigger_frame_index == 0
-    assert response.trigger_time_sec == 1.0
+    assert response.rating == "unsafe"
+    assert response.category == "O2: Violence, Harm, or Cruelty"
+    assert response.rationale == "Forced unsafe for testing"
+    assert response.trigger_index == 0
 
 
-def test_classifier_fake_image_mode_keeps_trigger_fields_null(
+def test_classifier_fake_force_unsafe_image_returns_trigger_index_zero(
     tmp_path: Path, capsys
 ) -> None:
     from dmguard.classifier_contract import ClassifierResponse
@@ -73,5 +75,5 @@ def test_classifier_fake_image_mode_keeps_trigger_fields_null(
     response = ClassifierResponse.model_validate_json(captured.out)
 
     assert exit_code == 0
-    assert response.trigger_frame_index is None
-    assert response.trigger_time_sec is None
+    assert response.rating == "unsafe"
+    assert response.trigger_index == 0

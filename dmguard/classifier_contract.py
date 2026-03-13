@@ -5,7 +5,7 @@ from pydantic import BaseModel, Field
 
 
 ClassifierMode = Literal["image", "video"]
-ClassifierPolicy = Literal["violence_gore"]
+ClassifierPolicy = Literal["O2_violence_harm_cruelty"]
 
 
 class ClassifierRequest(BaseModel):
@@ -16,9 +16,10 @@ class ClassifierRequest(BaseModel):
 
 class ClassifierResponse(BaseModel):
     policy: ClassifierPolicy
-    yes_prob: float
-    trigger_frame_index: int | None = None
-    trigger_time_sec: float | None = None
+    rating: Literal["safe", "unsafe"]
+    category: str
+    rationale: str
+    trigger_index: int | None = None
 
 
 def load_classifier_request(path: Path) -> ClassifierRequest:

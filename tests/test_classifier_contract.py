@@ -19,7 +19,7 @@ def test_classifier_request_parses_valid_image_payload(tmp_path: Path) -> None:
         {
             "mode": "image",
             "files": ["frame-1.jpg"],
-            "policy": "violence_gore",
+            "policy": "O2_violence_harm_cruelty",
         },
     )
 
@@ -29,7 +29,7 @@ def test_classifier_request_parses_valid_image_payload(tmp_path: Path) -> None:
 
     assert request.mode == "image"
     assert request.files == ["frame-1.jpg"]
-    assert request.policy == "violence_gore"
+    assert request.policy == "O2_violence_harm_cruelty"
 
 
 def test_classifier_request_rejects_empty_files_list(tmp_path: Path) -> None:
@@ -40,7 +40,7 @@ def test_classifier_request_rejects_empty_files_list(tmp_path: Path) -> None:
         {
             "mode": "video",
             "files": [],
-            "policy": "violence_gore",
+            "policy": "O2_violence_harm_cruelty",
         },
     )
 
@@ -57,9 +57,9 @@ def test_classifier_response_requires_known_policy() -> None:
         ClassifierResponse.model_validate(
             {
                 "policy": "unknown_policy",
-                "yes_prob": 0.5,
-                "trigger_frame_index": None,
-                "trigger_time_sec": None,
+                "rating": "safe",
+                "category": "NA: None applying",
+                "rationale": "test",
             }
         )
 
