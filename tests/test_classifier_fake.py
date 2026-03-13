@@ -34,10 +34,10 @@ def test_classifier_fake_force_safe_writes_valid_json_to_stdout(
     assert response.rating == "safe"
     assert response.category == "NA: None applying"
     assert response.rationale == "Forced safe for testing"
-    assert response.trigger_index is None
+    assert response.trigger_frame_index is None
 
 
-def test_classifier_fake_force_unsafe_returns_trigger_index(
+def test_classifier_fake_force_unsafe_video_returns_trigger_frame_index(
     tmp_path: Path, capsys
 ) -> None:
     from dmguard.classifier_contract import ClassifierResponse
@@ -58,10 +58,10 @@ def test_classifier_fake_force_unsafe_returns_trigger_index(
     assert response.rating == "unsafe"
     assert response.category == "O2: Violence, Harm, or Cruelty"
     assert response.rationale == "Forced unsafe for testing"
-    assert response.trigger_index == 0
+    assert response.trigger_frame_index == 0
 
 
-def test_classifier_fake_force_unsafe_image_returns_trigger_index_zero(
+def test_classifier_fake_force_unsafe_image_omits_trigger_frame_index(
     tmp_path: Path, capsys
 ) -> None:
     from dmguard.classifier_contract import ClassifierResponse
@@ -76,4 +76,4 @@ def test_classifier_fake_force_unsafe_image_returns_trigger_index_zero(
 
     assert exit_code == 0
     assert response.rating == "unsafe"
-    assert response.trigger_index == 0
+    assert response.trigger_frame_index is None

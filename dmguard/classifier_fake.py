@@ -26,7 +26,7 @@ def build_response(input_path: Path, *, force_unsafe: bool) -> ClassifierRespons
             rating="unsafe",
             category="O2: Violence, Harm, or Cruelty",
             rationale="Forced unsafe for testing",
-            trigger_index=0,
+            trigger_frame_index=0 if request.mode == "video" else None,
         )
 
     return ClassifierResponse(

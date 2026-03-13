@@ -515,8 +515,9 @@ Requirements:
   - --force-safe
   - --force-unsafe
 - Forced outputs:
-  - force-safe: rating=safe, category="NA: None applying", trigger_index=None
-  - force-unsafe: rating=unsafe, category="O2: Violence, Harm, or Cruelty", trigger_index=0
+  - force-safe: rating=safe, category="NA: None applying", trigger_frame_index=None
+  - force-unsafe (video): rating=unsafe, category="O2: Violence, Harm, or Cruelty", trigger_frame_index=0
+  - force-unsafe (image): rating=unsafe, category="O2: Violence, Harm, or Cruelty", trigger_frame_index=None
 - Add tests first for:
   - subprocess contract parsing
   - timeout handling

@@ -339,8 +339,8 @@ def handle_selftest(args) -> int:
     )
 
     print(f"result={response.rating} file={target_path} category={response.category}")
-    if response.trigger_index is not None:
-        print(f"trigger_index={response.trigger_index}")
+    if response.trigger_frame_index is not None:
+        print(f"trigger_frame_index={response.trigger_frame_index}")
 
     return 0
 

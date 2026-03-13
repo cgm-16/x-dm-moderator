@@ -19,7 +19,7 @@ class ClassifierResponse(BaseModel):
     rating: Literal["safe", "unsafe"]
     category: str
     rationale: str
-    trigger_index: int | None = None
+    trigger_frame_index: int | None = None
 
 
 def load_classifier_request(path: Path) -> ClassifierRequest:

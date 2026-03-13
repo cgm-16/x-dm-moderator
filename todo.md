@@ -216,7 +216,7 @@ Project: X DM Image Safety Filter Prototype (v0.1)
 - [x] Kill classifier on timeout
 - [x] `selftest` supports image and video
 - [x] `--force-safe` returns rating=safe, category="NA: None applying"
-- [x] `--force-unsafe` returns rating=unsafe, category="O2: Violence, Harm, or Cruelty", trigger_index=0
+- [x] `--force-unsafe` returns rating=unsafe, category="O2: Violence, Harm, or Cruelty", trigger_frame_index=0 (video) / None (image)
 - [x] Classifier stderr is captured and written to `classifier.log`
 - [x] Implement subprocess contract
 - [x] Implement fake classifier mode for early tests
