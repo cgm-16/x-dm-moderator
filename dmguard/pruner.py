@@ -51,7 +51,7 @@ async def run_daily_prune_if_due(
         try:
             last_pruned = _parse_utc(last_pruned_at)
         except ValueError:
-            last_pruned = None
+            pass
         else:
             if _parse_utc(now) - last_pruned <= _DAILY_PRUNE_INTERVAL:
                 return None
