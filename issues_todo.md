@@ -61,16 +61,17 @@ GitHub repo: https://github.com/cgm-16/x-dm-moderator
 - [x] #25 Classifier subprocess contract + fake entrypoint — deps: #1
 - [x] #26 Subprocess runner + timeout — deps: #25
 - [x] #27 Selftest CLI — deps: #26
+- [x] #96 Migrate classifier from ShieldGemma 2 to LlavaGuard v1.2 0.5B (contract rework supersedes #25/#26/#27 details)
 
 ## Milestone 9 — Moderation Engine
 
 - [x] #28 Video/GIF frame extraction — deps: #23
-- [ ] #29 Moderation decision logic — deps: #7, #26, #28
+- [ ] #29 Moderation decision logic (rating == "unsafe" + category O2) — deps: #7, #26, #28
 - [ ] #30 Sender state transitions — deps: #7, #29
 
 ## Milestone 10 — Audit + Pruning
 
-- [ ] #31 Audit + job error recording — deps: #7, #29
+- [ ] #31 Audit + job error recording (category_code/rationale columns) — deps: #7, #29
 - [x] #32 Prune command — deps: #7
 - [ ] #33 Daily prune trigger — deps: #32
 
