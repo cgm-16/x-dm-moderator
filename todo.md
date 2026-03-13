@@ -260,10 +260,10 @@ Project: X DM Image Safety Filter Prototype (v0.1)
 - [x] MVP behavior appends one final audit row per job
 - [x] `moderation_audit` retention = 30 days
 - [x] `moderation_audit` index = `created_at` only
-- [ ] Implement `job_errors`
-- [ ] Implement `moderation_audit`
+- [x] Implement `job_errors`
+- [x] Implement `moderation_audit`
 - [ ] Write final audit row on terminal job outcome
-- [ ] Add audit and error history tests
+- [x] Add audit and error history tests
 
 ---
 
