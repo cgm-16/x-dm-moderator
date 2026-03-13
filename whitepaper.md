@@ -19,7 +19,7 @@
 ### 제품 목표
 
 - 1:1 DM 수신 이벤트를 X 웹훅으로 수신하고, 메시지에 **첨부된 미디어(사진/영상/GIF)** 만 대상으로 로컬 분류를 수행한다.
-- 폭력/유혈 정책에서 **`yes_prob >= 0.90`** 이면 발신자를 즉시 차단한다.
+- 폭력/유혈 정책에서 LlavaGuard가 **`rating=Unsafe`** 및 카테고리 **O2**로 판정하면 발신자를 즉시 차단한다.
 - 텍스트-only DM은 **로그만 남기고 분류/차단을 수행하지 않는다**.
 - 시스템이 이미 “안전”으로 판정한 발신자는 이후 DM을 **영구적으로 스캔 스킵(allowlist)** 할 수 있어야 한다(자동 학습 + 최소 수동 CLI).
 
@@ -27,7 +27,7 @@
 
 - 1:1 DM만 처리(그룹 DM 제외).
 - 미래 이벤트만 처리(초기 설치 시 과거 백로그/리플레이 없음).
-- 폭력/유혈 단일 정책, 임계치 0.90 고정.
+- 폭력/유혈 단일 정책(O2_violence_harm_cruelty), LlavaGuard 이진 판정.
 - 사진 다중 첨부: 하나라도 위험이면 차단.
 - 영상/GIF: 프레임 샘플링 후 하나라도 위험이면 차단.
 - 발신자 상태 테이블(allow/blocked/block-failed) 관리.
@@ -99,7 +99,7 @@ flowchart LR
   A --> W[dmguard worker]
   W --> DB
   W --> M[Media fetch (from X / CDN)\nunspecified endpoints/auth]
-  W --> C[Local classifier\nShieldGemma-based\nunspecified runtime]
+  W --> C[Local classifier\nLlavaGuard-based\nCUDA runtime]
   W --> B[Block sender via X API\nunspecified endpoints/auth]
   W --> DB
 
@@ -178,7 +178,7 @@ flowchart TD
     LOCK --> STAGE{stage}
     STAGE -->|fetch_dm| FDM[Fetch DM details\nunspecified X API]
     STAGE -->|download_media| DLM[Download media\nsize caps + preview]
-    STAGE -->|classify| CLS[Run local classifier\npolicy=violence_gore\nthreshold=0.90]
+    STAGE -->|classify| CLS[Run local classifier\npolicy=O2_violence_harm_cruelty]
     STAGE -->|block| BLK[Call block API\nunspecified X API]
   end
 
@@ -339,9 +339,9 @@ flowchart TD
 | `event_id` | `TEXT` | `NOT NULL` | (확정) |
 | `sender_id` | `TEXT` | `NOT NULL` | (확정) |
 | `outcome` | `TEXT` | `NOT NULL` | enum: safe/blocked/skipped_allowlist/text_only_logged/error (확정) |
-| `policy` | `TEXT` | `NOT NULL` | (확정; v0.1은 violence_gore 고정) |
-| `threshold` | `REAL` | `NOT NULL` | (확정; 0.90) |
-| `score` | `REAL` |  | (확정; yes_prob 등) |
+| `policy` | `TEXT` | `NOT NULL` | (확정; v0.1은 O2_violence_harm_cruelty 고정) |
+| `category_code` | `TEXT` |  | (확정; LlavaGuard 카테고리 코드) |
+| `rationale` | `TEXT` |  | (확정; LlavaGuard 판정 근거) |
 | `trigger_frame_index` | `INTEGER` |  | (확정; 영상/GIF 트리거 프레임) |
 | `trigger_time_sec` | `REAL` |  | (확정) |
 | `block_attempted` | `INTEGER` | `NOT NULL` | (확정; 0/1) |
@@ -460,8 +460,8 @@ CREATE TABLE IF NOT EXISTS moderation_audit (
   sender_id           TEXT NOT NULL,
   outcome             TEXT NOT NULL,
   policy              TEXT NOT NULL,
-  threshold           REAL NOT NULL,
-  score               REAL,
+  category_code       TEXT,
+  rationale           TEXT,
   trigger_frame_index INTEGER,
   trigger_time_sec    REAL,
   block_attempted     INTEGER NOT NULL DEFAULT 0,
@@ -573,7 +573,7 @@ CREATE INDEX IF NOT EXISTS idx_rejected_requests_received_at
 | Traefik 패키징 | static/dynamic 템플릿, file provider watch, Host+Path 라우트, ACME tlsChallenge 구성 | 중 |
 | 잡/워커 코어 | `jobs` 상태기계, `next_run_at` 스케줄링, 재시도/429, 큐 상한/드롭 | 중 |
 | 미디어 파이프라인 | 첨부 미디어 탐지, 다운로드, 25MB 제한, 영상/GIF 프레임 샘플링 | 중~상 |
-| 분류기 통합 | ShieldGemma 기반 inference 실행(런타임/최적화는 unspecified), 임계치 0.90 로직 | 중 |
+| 분류기 통합 | LlavaGuard v1.2 0.5B 기반 inference 실행(CUDA), 이진 Safe/Unsafe 판정 로직 | 중 |
 | 차단 액션 통합 | X 차단 API 호출(엔드포인트/권한은 unspecified), `blocked_senders`/`block_failed_senders` 업데이트 | 중~상 |
 | 감사/오류/정리 | `moderation_audit` append-only 기록, `job_errors`, 30일 정리 + stale recovery | 중 |
 | 설치 자동화 | `configure.bat`, `setup_state.json`, `secrets.bin`, Servy 서비스 등록/의존성 | 중 |

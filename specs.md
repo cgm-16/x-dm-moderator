@@ -6,7 +6,7 @@ I’m treating these as fixed product choices from our discussion:
 * future events only
 * fail-open for v0.1
 * attached media only
-* local ShieldGemma-based moderation
+* local LlavaGuard-based moderation
 * auto-block on unsafe
 * local allow/block state is **system history/cache**, not X truth
 * canonical ingress is **DuckDNS + Traefik + public HTTPS on 443**, with Traefik exposing only `/webhooks/x`
@@ -15,7 +15,7 @@ A few external constraints shape the implementation:
 
 * X webhooks must be **public HTTPS**, must return **200 OK**, should respond within **10 seconds**, must support **CRC**, and the webhook URL **cannot include a port**. ([X Developer Platform][1])
 * The DM lookup endpoint is `GET /2/dm_events/{event_id}` and supports `attachments.media_keys`, `media.fields`, `preview_image_url`, `url`, and `variants`, which is exactly what the media pipeline needs. ([X Developer Platform][2])
-* ShieldGemma 2 is a **4B** image-safety model with built-in categories including **Violence/Gore**, which matches your chosen moderation scope. ([Hugging Face][3])
+* LlavaGuard v1.2 is a **0.5B** image-safety model with a full O1–O9 taxonomy; the system acts on **O2 (Violence, Harm, or Cruelty)**, which matches the chosen moderation scope. ([Hugging Face][3])
 * Traefik can be installed as a **binary**, distinguishes **startup/static** config from **routing/dynamic** config, and routing config can be hot-reloaded. ([Traefik Docs][4])
 * Traefik’s **TLS-ALPN-01** ACME flow requires public reachability on **port 443**, which matches the final webhook requirement and supports the simplified ingress story. ([Traefik Docs][5])
 * Servy can run arbitrary executables as Windows services, set dependencies/env vars, and manage logs/recovery, which fits both `dmguard` and Traefik. ([GitHub][6])
@@ -515,15 +515,14 @@ Requirements:
   - --force-safe
   - --force-unsafe
 - Forced outputs:
-  - force-safe score 0.01
-  - force-unsafe score 0.99
-  - include trigger_frame_index=0 and trigger_time_sec=1 for forced video unsafe
+  - force-safe: rating=safe, category="NA: None applying", trigger_index=None
+  - force-unsafe: rating=unsafe, category="O2: Violence, Harm, or Cruelty", trigger_index=0
 - Add tests first for:
   - subprocess contract parsing
   - timeout handling
   - forced safe/unsafe outputs
   - stderr capture
-- Do not implement the actual ShieldGemma model load yet; use a deterministic fake classifier entrypoint first.
+- Do not implement the actual LlavaGuard model load yet; use a deterministic fake classifier entrypoint first.
 
 Acceptance:
 - the classifier boundary is stable and testable
@@ -551,7 +550,7 @@ Requirements:
   - t=1..12
   - capped by duration
 - Use the classifier subprocess output to decide:
-  - unsafe if violence/gore yes_prob >= 0.90
+  - unsafe if rating == "unsafe" and category starts with "O2"
 - Append one final moderation_audit row per job in normal operation.
 - Add tests first for:
   - allowlist fast path
@@ -752,7 +751,7 @@ This is the point where the project is ready to move from discovery into impleme
 
 [1]: https://docs.x.com/x-api/webhooks/introduction?utm_source=chatgpt.com "Webhooks - X"
 [2]: https://docs.x.com/x-api/direct-messages/get-dm-event-by-id?utm_source=chatgpt.com "Get DM event by ID - X"
-[3]: https://huggingface.co/docs/transformers/main/en/model_doc/shieldgemma2?utm_source=chatgpt.com "ShieldGemma 2"
+[3]: https://huggingface.co/AIML-TUDA/LlavaGuard-v1.2-0.5B-OV "LlavaGuard v1.2 0.5B"
 [4]: https://doc.traefik.io/traefik/getting-started/configuration-overview/?utm_source=chatgpt.com "Traefik Configuration Documentation - Traefik"
 [5]: https://doc.traefik.io/traefik/v2.1/https/acme/?utm_source=chatgpt.com "Let's Encrypt | Traefik | v2.1"
 [6]: https://github.com/aelassas/servy?utm_source=chatgpt.com "GitHub - aelassas/servy: Turn Any App into a Native Windows Service - Full-Featured Alternative to NSSM, WinSW & FireDaemon Pro"

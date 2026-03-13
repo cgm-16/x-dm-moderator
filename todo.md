@@ -18,7 +18,7 @@ Project: X DM Image Safety Filter Prototype (v0.1)
 - [x] Media attachments only
 - [x] Text-only DMs are log-only
 - [x] Violence & Gore only
-- [x] Unsafe threshold = 0.90
+- [x] Unsafe = LlavaGuard rating "unsafe" + category O2
 - [x] Block if any image/frame is unsafe
 - [x] GIF/video: 1 fps from t=1s up to 12s, capped by duration
 - [x] Video/GIF > 25 MB falls back to preview image if available
@@ -215,13 +215,12 @@ Project: X DM Image Safety Filter Prototype (v0.1)
 - [x] Single total timeout = 180 seconds
 - [x] Kill classifier on timeout
 - [x] `selftest` supports image and video
-- [x] `--force-safe` returns 0.01
-- [x] `--force-unsafe` returns 0.99
-- [x] `--force-unsafe` video metadata uses trigger frame/time
+- [x] `--force-safe` returns rating=safe, category="NA: None applying"
+- [x] `--force-unsafe` returns rating=unsafe, category="O2: Violence, Harm, or Cruelty", trigger_index=0
 - [x] Classifier stderr is captured and written to `classifier.log`
 - [x] Implement subprocess contract
 - [x] Implement fake classifier mode for early tests
-- [ ] Integrate real ShieldGemma inference
+- [ ] Integrate real LlavaGuard inference
 - [x] Implement selftest CLI
 - [x] Add classifier contract tests
 
@@ -229,7 +228,7 @@ Project: X DM Image Safety Filter Prototype (v0.1)
 
 ## 13. Moderation engine
 
-- [x] Unsafe if violence/gore yes-prob >= 0.90
+- [x] Unsafe if LlavaGuard rating == "unsafe" and category O2
 - [x] Allowlist short-circuit happens before DM lookup
 - [x] First safe media DM adds sender to `allowed_senders`
 - [x] Allowlisted sender jobs are still recorded
