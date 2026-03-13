@@ -238,7 +238,7 @@ Project: X DM Image Safety Filter Prototype (v0.1)
 - [x] Block failure updates `block_failed_senders`
 - [x] Fail-open posture for v0.1
 - [x] Implement moderation decision engine
-- [ ] Implement sender-state transitions
+- [x] Implement sender-state transitions
 - [x] Implement allowlist fast path
 - [ ] Implement block cooldown logic
 - [x] Add moderation flow tests
