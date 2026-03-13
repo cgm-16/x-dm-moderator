@@ -506,6 +506,55 @@ def test_repo_senders_issue_30_record_block_failure_upserts_existing_row(
     }
 
 
+def test_repo_senders_issue_30_record_block_success_clears_cooldown(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    db_path = tmp_path / "state.db"
+
+    run(bootstrap_database(db_path))
+
+    from dmguard import repo_senders
+
+    monkeypatch.setattr(repo_senders, "_utc_now", lambda: "2026-03-11T00:00:00Z")
+
+    async def record_failure() -> bool:
+        from dmguard.db import get_connection
+        from dmguard.repo_senders import is_block_on_cooldown, record_block_failure
+
+        async with get_connection(db_path) as connection:
+            await record_block_failure(connection, "sender-5")
+            await connection.commit()
+            return await is_block_on_cooldown(connection, "sender-5")
+
+    on_cooldown = run(record_failure())
+    assert on_cooldown is True
+
+    async def record_success() -> tuple[bool, dict[str, object] | None]:
+        from dmguard.db import get_connection
+        from dmguard.repo_senders import (
+            get_block_failed,
+            is_block_on_cooldown,
+            record_block_success,
+        )
+
+        async with get_connection(db_path) as connection:
+            await record_block_success(
+                connection,
+                sender_id="sender-5",
+                source_event_id="event-5",
+            )
+            await connection.commit()
+            return (
+                await is_block_on_cooldown(connection, "sender-5"),
+                await get_block_failed(connection, "sender-5"),
+            )
+
+    still_on_cooldown, block_failed_row = run(record_success())
+
+    assert still_on_cooldown is False
+    assert block_failed_row is None
+
+
 def test_repo_audit_rejected_and_kv_write_expected_rows(tmp_path: Path) -> None:
     db_path = tmp_path / "state.db"
 
