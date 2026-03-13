@@ -425,7 +425,7 @@ def test_warmup_invokes_setup_warmup(
             "rating": "safe",
             "category": "NA: None applying",
             "rationale": "Forced safe for testing",
-            "trigger_index": None,
+            "trigger_frame_index": None,
         }
 
     monkeypatch.setattr(cli, "run_setup_warmup", fake_run_setup_warmup)
@@ -441,7 +441,7 @@ def test_warmup_invokes_setup_warmup(
         "rating": "safe",
         "category": "NA: None applying",
         "rationale": "Forced safe for testing",
-        "trigger_index": None,
+        "trigger_frame_index": None,
     }
 
 
@@ -541,7 +541,7 @@ def test_selftest_force_unsafe_video_prints_trigger_info(
     assert captured.err == ""
     assert "result=unsafe" in captured.out
     assert "category=O2: Violence, Harm, or Cruelty" in captured.out
-    assert "trigger_index=0" in captured.out
+    assert "trigger_frame_index=0" in captured.out
 
 
 def test_selftest_missing_file_fails_with_clear_error(
