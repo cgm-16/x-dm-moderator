@@ -36,12 +36,16 @@ SECRET_ASSIGNMENT_PATTERN = re.compile(
 )
 
 
+def redact_secrets(message: str) -> str:
+    return SECRET_ASSIGNMENT_PATTERN.sub(_replace_secret_value, message)
+
+
 @dataclass(frozen=True)
 class SetupLogger:
     path: Path = DEFAULT_SETUP_LOG_PATH
 
     def redact(self, message: str) -> str:
-        return SECRET_ASSIGNMENT_PATTERN.sub(self._replace_secret_value, message)
+        return redact_secrets(message)
 
     def log(self, message: str) -> None:
         self.path.parent.mkdir(parents=True, exist_ok=True)
@@ -52,10 +56,10 @@ class SetupLogger:
         with self.path.open("a", encoding="utf-8") as log_file:
             log_file.write(line)
 
-    @staticmethod
-    def _replace_secret_value(match: re.Match[str]) -> str:
-        quote = match.group("quote")
-        return f"{match.group('label')}{quote}[REDACTED]{quote}"
+
+def _replace_secret_value(match: re.Match[str]) -> str:
+    quote = match.group("quote")
+    return f"{match.group('label')}{quote}[REDACTED]{quote}"
 
 
-__all__ = ["DEFAULT_SETUP_LOG_PATH", "SetupLogger"]
+__all__ = ["DEFAULT_SETUP_LOG_PATH", "SetupLogger", "redact_secrets"]

@@ -81,7 +81,7 @@ def test_prune_old_data_deletes_old_terminal_history_in_order(tmp_path: Path) ->
     async def scenario():
         from dmguard.db import get_connection
         from dmguard.job_machine import JobStage, JobStatus
-        from dmguard.repo_audit import append_audit_row, insert_job_error
+        from dmguard.repo_audit import append_audit_row, record_job_error
         from dmguard.repo_events import insert_event
         from dmguard.repo_jobs import insert_job, update_job_status
         from dmguard.repo_rejected import insert_rejected_request
@@ -114,7 +114,7 @@ def test_prune_old_data_deletes_old_terminal_history_in_order(tmp_path: Path) ->
                 ("2000-01-01 00:00:00", job_id),
             )
 
-            error_id = await insert_job_error(
+            error_id = await record_job_error(
                 connection,
                 job_id=job_id,
                 stage=JobStage.fetch_dm.value,
@@ -345,7 +345,7 @@ def test_prune_old_data_keeps_recent_terminal_history(tmp_path: Path) -> None:
     async def scenario():
         from dmguard.db import get_connection
         from dmguard.job_machine import JobStage, JobStatus
-        from dmguard.repo_audit import append_audit_row, insert_job_error
+        from dmguard.repo_audit import append_audit_row, record_job_error
         from dmguard.repo_events import insert_event
         from dmguard.repo_jobs import insert_job, update_job_status
         from dmguard.pruner import PruneResult, prune_old_data
@@ -372,7 +372,7 @@ def test_prune_old_data_keeps_recent_terminal_history(tmp_path: Path) -> None:
                 status=JobStatus.error,
                 stage=JobStage.fetch_dm,
             )
-            await insert_job_error(
+            await record_job_error(
                 connection,
                 job_id=job_id,
                 stage=JobStage.fetch_dm.value,

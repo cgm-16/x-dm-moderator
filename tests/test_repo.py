@@ -19,6 +19,18 @@ async def fetch_row(
     return row
 
 
+async def fetch_all_rows(
+    db_path: Path, query: str, params: tuple[object, ...] = ()
+) -> list[tuple]:
+    from dmguard.db import get_connection
+
+    async with get_connection(db_path) as connection:
+        cursor = await connection.execute(query, params)
+        rows = await cursor.fetchall()
+
+    return rows
+
+
 def test_repo_events_insert_and_get(tmp_path: Path) -> None:
     db_path = tmp_path / "state.db"
 
@@ -372,7 +384,7 @@ def test_repo_audit_rejected_and_kv_write_expected_rows(tmp_path: Path) -> None:
 
     async def scenario() -> tuple[int, int, str | None]:
         from dmguard.db import get_connection
-        from dmguard.repo_audit import append_audit_row, insert_job_error
+        from dmguard.repo_audit import append_audit_row, record_job_error
         from dmguard.repo_kv import kv_get, kv_set
         from dmguard.repo_rejected import insert_rejected_request
 
@@ -390,13 +402,16 @@ def test_repo_audit_rejected_and_kv_write_expected_rows(tmp_path: Path) -> None:
                 trigger_time_sec=None,
                 block_attempted=False,
             )
-            error_id = await insert_job_error(
+            error_id = await record_job_error(
                 connection,
                 job_id=job_id,
                 stage=JobStage.fetch_dm.value,
                 attempt=1,
                 error_type="network",
-                error_message="boom",
+                error_message=(
+                    "authorization: Bearer eyJhbGciOiJSUzI1NiJ9.payload.sig "
+                    'x_access_token=access-token password="hunter2"'
+                ),
                 http_status=500,
             )
             await insert_rejected_request(
@@ -473,8 +488,76 @@ def test_repo_audit_rejected_and_kv_write_expected_rows(tmp_path: Path) -> None:
         JobStage.fetch_dm.value,
         1,
         "network",
-        "boom",
+        'authorization: [REDACTED] x_access_token=[REDACTED] password="[REDACTED]"',
         500,
     )
     assert rejected_row == ("127.0.0.1", "/webhooks/x", "invalid_json", "abc123")
     assert kv_value == "2026-03-13T00:00:00Z"
+
+
+def test_repo_audit_allows_multiple_rows_per_job(tmp_path: Path) -> None:
+    db_path = tmp_path / "state.db"
+
+    run(bootstrap_database(db_path))
+    run(insert_event_row(db_path, event_id="event-1", sender_id="sender-1"))
+    job_id = run(
+        insert_job_row(
+            db_path,
+            event_id="event-1",
+            next_run_at="2026-03-11T00:00:00Z",
+        )
+    )
+
+    async def scenario() -> list[tuple[int, str]]:
+        from dmguard.db import get_connection
+        from dmguard.repo_audit import append_audit_row
+
+        async with get_connection(db_path) as connection:
+            await append_audit_row(
+                connection,
+                job_id=job_id,
+                event_id="event-1",
+                sender_id="sender-1",
+                outcome="safe",
+                policy="O2_violence_harm_cruelty",
+                category_code="NA: None applying",
+                rationale="All frames safe",
+                trigger_frame_index=None,
+                trigger_time_sec=None,
+                block_attempted=False,
+            )
+            await append_audit_row(
+                connection,
+                job_id=job_id,
+                event_id="event-1",
+                sender_id="sender-1",
+                outcome="error",
+                policy="O2_violence_harm_cruelty",
+                category_code=None,
+                rationale=None,
+                trigger_frame_index=None,
+                trigger_time_sec=None,
+                block_attempted=False,
+            )
+            await connection.commit()
+
+        return [
+            tuple(row)
+            for row in await fetch_all_rows(
+                db_path,
+                """
+                SELECT job_id, outcome
+                FROM moderation_audit
+                WHERE job_id = ?
+                ORDER BY id ASC
+                """,
+                (job_id,),
+            )
+        ]
+
+    rows = run(scenario())
+
+    assert rows == [
+        (job_id, "safe"),
+        (job_id, "error"),
+    ]
