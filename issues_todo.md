@@ -73,7 +73,7 @@ GitHub repo: https://github.com/cgm-16/x-dm-moderator
 
 - [ ] #31 Audit + job error recording (category_code/rationale columns) — deps: #7, #29
 - [x] #32 Prune command — deps: #7
-- [ ] #33 Daily prune trigger — deps: #32
+- [x] #33 Daily prune trigger — deps: #32
 
 ## Milestone 11 — Traefik + Services
 

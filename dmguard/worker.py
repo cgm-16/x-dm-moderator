@@ -5,6 +5,7 @@ from pathlib import Path
 
 from dmguard.db import get_connection
 from dmguard.job_machine import JobStatus
+from dmguard.pruner import run_daily_prune_if_due
 from dmguard.scheduler import claim_job, complete_job, dequeue_next_job, schedule_retry
 
 
@@ -35,6 +36,16 @@ async def _mark_job_done(db_path: Path, job_id: int) -> None:
     async with get_connection(db_path) as connection:
         await complete_job(connection, job_id, JobStatus.done)
         await connection.commit()
+
+
+async def _run_daily_prune_if_due(
+    db_path: Path,
+    logger: logging.Logger,
+) -> None:
+    async with get_connection(db_path) as connection:
+        result = await run_daily_prune_if_due(connection, logger)
+        if result is not None:
+            await connection.commit()
 
 
 async def _retry_or_error(
@@ -76,6 +87,7 @@ async def worker_loop(
 
     while True:
         try:
+            await _run_daily_prune_if_due(db_path, worker_logger)
             job = await _claim_next_job(db_path)
             if job is not None:
                 job_id = int(job["job_id"])

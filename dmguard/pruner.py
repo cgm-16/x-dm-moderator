@@ -1,13 +1,18 @@
 from collections.abc import Iterator
 from dataclasses import dataclass
+from datetime import datetime, timedelta, timezone
+import logging
 from typing import TypeVar
 
 import aiosqlite
 
 from dmguard.job_machine import JobStatus, is_terminal
 from dmguard.repo_common import fetch_all_dicts
+from dmguard.repo_kv import kv_get, kv_set
 
 _SQLITE_MAX_VARIABLES = 32766
+_DAILY_PRUNE_INTERVAL = timedelta(hours=24)
+_LAST_PRUNED_AT_KEY = "last_pruned_at"
 _TERMINAL_JOB_STATUSES = tuple(
     status.value for status in JobStatus if is_terminal(status)
 )
@@ -22,6 +27,53 @@ class PruneResult:
     webhook_events_deleted: int = 0
     moderation_audit_deleted: int = 0
     rejected_requests_deleted: int = 0
+
+
+def _utc_now() -> str:
+    return (
+        datetime.now(timezone.utc).isoformat(timespec="seconds").replace("+00:00", "Z")
+    )
+
+
+def _parse_utc(timestamp: str) -> datetime:
+    return datetime.fromisoformat(timestamp.replace("Z", "+00:00"))
+
+
+async def run_daily_prune_if_due(
+    connection: aiosqlite.Connection,
+    logger: logging.Logger,
+    retention_days: int = 30,
+) -> PruneResult | None:
+    now = _utc_now()
+    last_pruned_at = await kv_get(connection, _LAST_PRUNED_AT_KEY)
+
+    if last_pruned_at is not None:
+        try:
+            last_pruned = _parse_utc(last_pruned_at)
+        except ValueError:
+            last_pruned = None
+        else:
+            if _parse_utc(now) - last_pruned <= _DAILY_PRUNE_INTERVAL:
+                return None
+
+    result = await prune_old_data(connection, retention_days=retention_days)
+    await kv_set(
+        connection,
+        key=_LAST_PRUNED_AT_KEY,
+        value=now,
+        updated_at=now,
+    )
+    logger.info(
+        "Daily prune completed "
+        "job_errors_deleted=%s jobs_deleted=%s webhook_events_deleted=%s "
+        "moderation_audit_deleted=%s rejected_requests_deleted=%s",
+        result.job_errors_deleted,
+        result.jobs_deleted,
+        result.webhook_events_deleted,
+        result.moderation_audit_deleted,
+        result.rejected_requests_deleted,
+    )
+    return result
 
 
 async def prune_old_data(
@@ -169,4 +221,4 @@ def _iter_batches(values: list[T], *, batch_size: int) -> Iterator[list[T]]:
         yield values[start : start + batch_size]
 
 
-__all__ = ["PruneResult", "prune_old_data"]
+__all__ = ["PruneResult", "prune_old_data", "run_daily_prune_if_due"]
