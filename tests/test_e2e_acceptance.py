@@ -62,6 +62,7 @@ def create_app_client(
         StubSecretStore(
             x_consumer_secret=consumer_secret,
             x_access_token="access-token",
+            x_user_id="bot-user-id",
         ),
         db_path=db_path,
         classifier_cmd=classifier_cmd,
@@ -304,7 +305,7 @@ def test_e2e_unsafe_media_webhook_blocks_sender(
 
         if (
             request.method == "POST"
-            and request.url.path == "/2/users/sender-unsafe/dm/block"
+            and request.url.path == "/2/users/bot-user-id/blocking"
         ):
             return httpx.Response(200, json={"data": {"blocking": True}})
 
@@ -353,7 +354,108 @@ def test_e2e_unsafe_media_webhook_blocks_sender(
 
     assert blocked_row == ("sender-unsafe", "event-unsafe")
     assert audit_row == ("blocked", "O2: Violence, Harm, or Cruelty", 1)
-    assert requests[-1] == ("POST", "https://api.x.com/2/users/sender-unsafe/dm/block")
+    assert requests[-1] == ("POST", "https://api.x.com/2/users/bot-user-id/blocking")
+
+
+def test_e2e_block_api_failure_records_error_outcome(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    db_path = tmp_path / "state.db"
+    run(bootstrap_database(db_path))
+    requests: list[tuple[str, str]] = []
+
+    async def handler(request: httpx.Request) -> httpx.Response:
+        requests.append((request.method, str(request.url)))
+        assert request.headers["Authorization"] == "Bearer access-token"
+
+        if request.method == "GET" and request.url.path == "/2/dm_events/event-bfail":
+            return httpx.Response(
+                200,
+                json=build_dm_event_response(
+                    event_id="event-bfail",
+                    sender_id="sender-bfail",
+                    media=[
+                        {
+                            "media_key": "3_1",
+                            "type": "photo",
+                            "url": "https://media.example.com/bfail-photo.jpg",
+                        }
+                    ],
+                    media_keys=["3_1"],
+                ),
+            )
+
+        if (
+            request.method == "GET"
+            and str(request.url) == "https://media.example.com/bfail-photo.jpg"
+        ):
+            return httpx.Response(200, content=b"bfail-photo-bytes")
+
+        if (
+            request.method == "POST"
+            and request.url.path == "/2/users/bot-user-id/blocking"
+        ):
+            return httpx.Response(500, text="Internal Server Error")
+
+        raise AssertionError(f"Unexpected request: {request.method} {request.url}")
+
+    client = create_app_client(
+        db_path,
+        tmp_path,
+        monkeypatch,
+        handler=handler,
+        classifier_cmd=unsafe_classifier_cmd(),
+    )
+
+    with client:
+        response = post_signed_webhook(
+            client,
+            build_webhook_payload("event-bfail", "sender-bfail"),
+        )
+        assert response.status_code == 200
+
+        job_id = run(find_job_id(db_path, "event-bfail"))
+        run(wait_for_job_status(db_path, job_id, JobStatus.error.value))
+
+    blocked_row = run(
+        fetch_one_row(
+            db_path,
+            """
+            SELECT sender_id
+            FROM blocked_senders
+            WHERE sender_id = ?
+            """,
+            ("sender-bfail",),
+        )
+    )
+    failed_row = run(
+        fetch_one_row(
+            db_path,
+            """
+            SELECT sender_id
+            FROM block_failed_senders
+            WHERE sender_id = ?
+            """,
+            ("sender-bfail",),
+        )
+    )
+    audit_row = run(
+        fetch_one_row(
+            db_path,
+            """
+            SELECT outcome, category_code, block_attempted
+            FROM moderation_audit
+            WHERE job_id = ?
+            """,
+            (job_id,),
+        )
+    )
+
+    assert blocked_row is None
+    assert failed_row is not None
+    assert audit_row == ("error", "O2: Violence, Harm, or Cruelty", 1)
+    assert requests[-1] == ("POST", "https://api.x.com/2/users/bot-user-id/blocking")
 
 
 def test_e2e_allowlisted_sender_skips_before_dm_lookup(

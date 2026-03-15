@@ -25,12 +25,17 @@ class XClient:
         timeout_seconds: float = 10.0,
         transport: httpx.AsyncBaseTransport | None = None,
     ) -> None:
+        self._secret_store = secret_store
         self._client = httpx.AsyncClient(
             base_url=base_url,
             headers={"Authorization": f"Bearer {secret_store.get('x_access_token')}"},
             timeout=timeout_seconds,
             transport=transport,
         )
+
+    @property
+    def authenticated_user_id(self) -> str:
+        return self._secret_store.get("x_user_id")
 
     async def __aenter__(self) -> "XClient":
         return self
