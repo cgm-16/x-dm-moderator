@@ -1,3 +1,4 @@
+import logging
 from pathlib import Path
 import sys
 
@@ -27,13 +28,21 @@ def build_runtime_classifier_cmd(config: AppConfig) -> tuple[str, ...]:
     return build_classifier_cmd(config.classifier_backend)
 
 
-def load_runtime_classifier_cmd(config_path: Path) -> tuple[str, ...]:
+def load_runtime_classifier(
+    config_path: Path,
+) -> tuple[tuple[str, ...], ClassifierBackend]:
     try:
         config = load_app_config(config_path)
     except FileNotFoundError:
-        return FAKE_CLASSIFIER_BASE_CMD
+        logging.warning("Config not found at %s, falling back to fake classifier", config_path)
+        return FAKE_CLASSIFIER_BASE_CMD, "fake"
 
-    return build_runtime_classifier_cmd(config)
+    return build_runtime_classifier_cmd(config), config.classifier_backend
+
+
+def load_runtime_classifier_cmd(config_path: Path) -> tuple[str, ...]:
+    cmd, _ = load_runtime_classifier(config_path)
+    return cmd
 
 
 def build_fake_classifier_cmd(
@@ -54,10 +63,12 @@ def build_fake_classifier_cmd(
 
 
 __all__ = [
+    "ClassifierBackend",
     "FAKE_CLASSIFIER_BASE_CMD",
     "LLAVAGUARD_CLASSIFIER_BASE_CMD",
     "build_classifier_cmd",
     "build_fake_classifier_cmd",
     "build_runtime_classifier_cmd",
+    "load_runtime_classifier",
     "load_runtime_classifier_cmd",
 ]

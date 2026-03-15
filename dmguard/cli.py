@@ -13,9 +13,8 @@ import httpx
 import yaml
 
 from dmguard.classifier_backend import (
-    LLAVAGUARD_CLASSIFIER_BASE_CMD,
     build_fake_classifier_cmd,
-    load_runtime_classifier_cmd,
+    load_runtime_classifier,
 )
 from dmguard.classifier_runner import run_classifier
 from dmguard.db import get_connection
@@ -322,10 +321,10 @@ def handle_selftest(args) -> int:
         raise ValueError(f"Selftest path is not a file: {target_path}")
 
     mode = "image" if args.image is not None else "video"
-    classifier_cmd = _resolve_selftest_classifier_cmd(args)
+    classifier_cmd, backend = _resolve_selftest_classifier(args)
     input_paths = [target_path]
 
-    if mode == "video" and tuple(classifier_cmd) == LLAVAGUARD_CLASSIFIER_BASE_CMD:
+    if mode == "video" and backend == "llavaguard":
         frames = extract_frames(target_path, target_path.stem)
         if not frames:
             raise ValueError(f"No classifier frames extracted for selftest: {target_path}")
@@ -375,19 +374,19 @@ def run_setup_warmup() -> dict[str, object]:
             "files": ["warmup.jpg"],
             "policy": "O2_violence_harm_cruelty",
         },
-        load_runtime_classifier_cmd(CONFIG_PATH),
+        load_runtime_classifier(CONFIG_PATH)[0],
     )
     return response.model_dump(mode="json")
 
 
-def _resolve_selftest_classifier_cmd(args) -> tuple[str, ...]:
+def _resolve_selftest_classifier(args) -> tuple[tuple[str, ...], str]:
     if args.force_safe or args.force_unsafe:
         return build_fake_classifier_cmd(
             force_safe=args.force_safe,
             force_unsafe=args.force_unsafe,
-        )
+        ), "fake"
 
-    return load_runtime_classifier_cmd(CONFIG_PATH)
+    return load_runtime_classifier(CONFIG_PATH)
 
 
 def build_remote_checks(state: SetupState | None) -> dict[str, object]:
