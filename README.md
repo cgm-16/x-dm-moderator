@@ -32,6 +32,12 @@ On Windows, skip this section and use the default paths under `C:\Program Files\
 
 The CLI (`uv run dmguard`) handles setup and diagnostics; `python -m dmguard` starts the server.
 
+On Windows, the operational ingress flow expects:
+
+- Traefik templates under `C:\Program Files\XDMModerator\traefik\templates\`
+- `servy-cli.exe` installed at `C:\Program Files\Servy\servy-cli.exe`
+- public `443` reachability for the DuckDNS hostname
+
 Fill in the values below, then run:
 
 ```bash
@@ -40,6 +46,7 @@ export DMGUARD_ACME_EMAIL="ops@example.com"
 export DMGUARD_DUCKDNS_TOKEN="replace-me"
 export DMGUARD_X_ACCESS_TOKEN="replace-me"
 export DMGUARD_X_CONSUMER_SECRET="replace-me"
+export DMGUARD_X_USER_ID="replace-me"
 export DMGUARD_HF_TOKEN="replace-me"
 
 uv run dmguard setup --verbose \
@@ -48,6 +55,7 @@ uv run dmguard setup --verbose \
   --duckdns-token "$DMGUARD_DUCKDNS_TOKEN" \
   --x-access-token "$DMGUARD_X_ACCESS_TOKEN" \
   --x-consumer-secret "$DMGUARD_X_CONSUMER_SECRET" \
+  --x-user-id "$DMGUARD_X_USER_ID" \
   --hf-token "$DMGUARD_HF_TOKEN"
 ```
 
@@ -58,26 +66,7 @@ This writes the local runtime files under the resolved data root:
 - `setup_state.json`
 - `setup.log`
 
-### Add the missing `x_user_id` secret
-
-`dmguard setup` does not currently prompt for `x_user_id`, but the runtime X client and `readycheck` expect it to exist in `secrets.bin`.
-
-Set your X user ID, then patch the generated secrets file:
-
-```bash
-export DMGUARD_X_USER_ID="replace-me"
-
-uv run python - <<'PY'
-import json
-import os
-from dmguard.paths import SECRETS_PATH
-
-payload = json.loads(SECRETS_PATH.read_text(encoding="utf-8"))
-payload["x_user_id"] = os.environ["DMGUARD_X_USER_ID"]
-SECRETS_PATH.write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
-print(f"updated {SECRETS_PATH}")
-PY
-```
+On Windows, `setup` continues through DuckDNS update, Traefik artifact generation, Servy service install/start, public HTTPS validation, classifier warmup, and X webhook registration. On macOS/Linux, those Windows-only ingress stages are recorded as skipped so local development setup can still prepare config and secrets without pretending the public edge is operational.
 
 ### Inspect setup state
 
@@ -151,8 +140,6 @@ Run the current readiness check:
 ```bash
 uv run dmguard readycheck
 ```
-
-Note: `readycheck` currently expects the `app_service` setup stage to be marked done. That stage is not created by the current `setup` flow, so `status` and `status --full` are the more useful local diagnostics today.
 
 ### Running tests
 
