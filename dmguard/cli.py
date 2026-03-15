@@ -58,6 +58,7 @@ from dmguard.setup_state import (
     save_setup_state,
 )
 from dmguard.x_client import XClient
+from dmguard.x_oauth import run_pkce_flow
 from dmguard.x_webhooks import ensure_webhook_registered
 
 
@@ -84,11 +85,10 @@ SETUP_CONFIG_DEFAULTS = {
 TEXT_PROMPTS = {
     "public_hostname": "Public DuckDNS hostname",
     "acme_email": "ACME email",
-    "x_user_id": "X user ID",
+    "x_client_id": "X OAuth 2.0 Client ID",
 }
 SECRET_PROMPTS = {
     "duckdns_token": "DuckDNS token",
-    "x_access_token": "X access token",
     "x_consumer_secret": "X consumer secret",
     "hf_token": "Hugging Face token",
 }
@@ -116,9 +116,8 @@ def build_parser() -> ArgumentParser:
     setup_parser.add_argument("--public-hostname")
     setup_parser.add_argument("--acme-email")
     setup_parser.add_argument("--duckdns-token")
-    setup_parser.add_argument("--x-access-token")
+    setup_parser.add_argument("--x-client-id")
     setup_parser.add_argument("--x-consumer-secret")
-    setup_parser.add_argument("--x-user-id")
     setup_parser.add_argument("--hf-token")
     setup_parser.add_argument("--verbose", action="store_true")
 
@@ -207,15 +206,20 @@ def handle_setup(args) -> int:
         "public_hostname": _get_text_value(args.public_hostname, "public_hostname"),
         "acme_email": _get_text_value(args.acme_email, "acme_email"),
     }
+    x_client_id = _get_text_value(args.x_client_id, "x_client_id")
     secret_values = {
         "duckdns_token": _get_secret_value(args.duckdns_token, "duckdns_token"),
-        "x_access_token": _get_secret_value(args.x_access_token, "x_access_token"),
         "x_consumer_secret": _get_secret_value(
             args.x_consumer_secret, "x_consumer_secret"
         ),
-        "x_user_id": _get_text_value(args.x_user_id, "x_user_id"),
         "hf_token": _get_secret_value(args.hf_token, "hf_token"),
+        "x_client_id": x_client_id,
     }
+
+    oauth_result = run_pkce_flow(x_client_id)
+    secret_values["x_access_token"] = oauth_result["x_access_token"]
+    secret_values["x_refresh_token"] = oauth_result["x_refresh_token"]
+    secret_values["x_user_id"] = oauth_result["x_user_id"]
     state = _load_or_create_setup_state()
     invalidated_stages: list[str] = []
     verbose_messages: list[str] = []
