@@ -218,7 +218,10 @@ async def _attempt_block_sender(
     x_client: XClient,
 ) -> bool:
     try:
-        await x_client.post(f"/2/users/{event.sender_id}/dm/block")
+        await x_client.post(
+            f"/2/users/{x_client.authenticated_user_id}/blocking",
+            json={"target_user_id": event.sender_id},
+        )
     except (httpx.HTTPError, RateLimitedError, XApiError):
         await record_block_failure(connection, event.sender_id)
         _LOGGER.warning(
