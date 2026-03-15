@@ -69,9 +69,7 @@ TEXT_PROMPTS = {
 SECRET_PROMPTS = {
     "duckdns_token": "DuckDNS token",
     "x_access_token": "X access token",
-    "x_refresh_token": "X refresh token",
     "x_consumer_secret": "X consumer secret",
-    "x_app_bearer": "X app bearer",
     "hf_token": "Hugging Face token",
 }
 
@@ -94,9 +92,7 @@ def build_parser() -> ArgumentParser:
     setup_parser.add_argument("--acme-email")
     setup_parser.add_argument("--duckdns-token")
     setup_parser.add_argument("--x-access-token")
-    setup_parser.add_argument("--x-refresh-token")
     setup_parser.add_argument("--x-consumer-secret")
-    setup_parser.add_argument("--x-app-bearer")
     setup_parser.add_argument("--hf-token")
     setup_parser.add_argument("--verbose", action="store_true")
 
@@ -187,11 +183,9 @@ def handle_setup(args) -> int:
     secret_values = {
         "duckdns_token": _get_secret_value(args.duckdns_token, "duckdns_token"),
         "x_access_token": _get_secret_value(args.x_access_token, "x_access_token"),
-        "x_refresh_token": _get_secret_value(args.x_refresh_token, "x_refresh_token"),
         "x_consumer_secret": _get_secret_value(
             args.x_consumer_secret, "x_consumer_secret"
         ),
-        "x_app_bearer": _get_secret_value(args.x_app_bearer, "x_app_bearer"),
         "hf_token": _get_secret_value(args.hf_token, "hf_token"),
     }
     state = _load_or_create_setup_state()
@@ -546,6 +540,7 @@ def _get_secret_value(current_value: str | None, prompt_key: str) -> str:
 
     prompt = f"{SECRET_PROMPTS[prompt_key]}: "
     value = getpass.getpass(prompt).strip()
+    print(f"  -> received {len(value)} characters", file=sys.stderr)
     if not value:
         raise ValueError(f"{prompt_key} is required")
     return value

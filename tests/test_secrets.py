@@ -18,9 +18,7 @@ def test_file_secret_store_get_returns_expected_value(tmp_path: Path) -> None:
 {
   "duckdns_token": "duckdns-token",
   "x_access_token": "access-token",
-  "x_refresh_token": "refresh-token",
   "x_consumer_secret": "consumer-secret",
-  "x_app_bearer": "app-bearer",
   "hf_token": "hf-token"
 }
 """.strip(),
@@ -44,9 +42,7 @@ def test_file_secret_store_raises_missing_secret_error_for_unknown_key(
 {
   "duckdns_token": "duckdns-token",
   "x_access_token": "access-token",
-  "x_refresh_token": "refresh-token",
   "x_consumer_secret": "consumer-secret",
-  "x_app_bearer": "app-bearer",
   "hf_token": "hf-token"
 }
 """.strip(),
@@ -85,9 +81,7 @@ def test_file_secret_store_uses_default_secrets_path(
 {
   "duckdns_token": "duckdns-token",
   "x_access_token": "access-token",
-  "x_refresh_token": "refresh-token",
   "x_consumer_secret": "consumer-secret",
-  "x_app_bearer": "app-bearer",
   "hf_token": "hf-token"
 }
 """.strip(),
