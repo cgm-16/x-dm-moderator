@@ -325,14 +325,14 @@ Project: X DM Image Safety Filter Prototype (v0.1)
 - [x] Traefik is managed as a separate Windows service
 - [x] Service manager = Servy
 - [x] `dmguard` is also managed by Servy
-- [ ] Traefik is installed/started before `dmguard`
-  Current repo state: the repo generates separate Servy service definitions, but does not install or start the services.
+- [x] Traefik is installed/started before `dmguard`
+  Current repo state: `setup` now installs both services via Servy and starts Traefik before starting `dmguard`.
 - [ ] `dmguard` only installs after TLS + public reachability succeed
-  Current repo state: TLS/public-reachability gating is not enforced because the setup service stage is not implemented.
+  Current repo state: service installation/start now exists, but it still runs before the HTTPS/public-reachability verification stages.
 - [x] Generate Traefik service definition
 - [x] Generate `dmguard` service definition
 - [ ] Implement service install/start/update logic
-  Current repo state: service-definition generation is implemented; service installation, start, and update are still missing.
+  Current repo state: service-definition generation plus install/start are implemented through Servy; explicit update semantics are not separately verified.
 - [x] Add service config generation tests
 
 ---
@@ -341,10 +341,10 @@ Project: X DM Image Safety Filter Prototype (v0.1)
 
 - [x] User inputs come from prompts and flags, not a user-authored config file
 - [x] `config.yaml` is installer-authored, runtime-read, non-secret config
-- [ ] Public HTTPS reachability is checked before webhook registration
-  Current repo state: `status --full` can run a public HTTPS probe, but `setup` does not execute it before any webhook-registration step.
+- [x] Public HTTPS reachability is checked before webhook registration
+  Current repo state: `setup` now runs the public HTTPS probe before the webhook registration step.
 - [ ] Unsupported environment => setup fails
-  Current repo state: `setup` does not currently reject unsupported environments through a dedicated preflight validation step.
+  Current repo state: non-Windows environments now skip the Windows-only ingress stages instead of failing through a dedicated preflight rejection.
 - [x] Implement setup subcommands (`setup`, `reset --force`, `warmup`, `status`, `status --full`)
 - [x] Add setup CLI tests
 - [ ] Implement preflight stage
@@ -353,20 +353,20 @@ Project: X DM Image Safety Filter Prototype (v0.1)
   Current repo state: `setup` writes `config.yaml` and marks `local_config` done inside `dmguard setup`.
 - [x] Implement X auth stage
   Current repo state: `setup` collects and writes `secrets.bin` and marks `x_auth` done inside `dmguard setup`.
-- [ ] Implement DuckDNS stage
-  Current repo state: `setup` collects the DuckDNS token and `status --full` can resolve the hostname, but there is no DuckDNS stage executor.
-- [ ] Implement Traefik stage
-  Current repo state: template rendering and service-definition generation exist, but `setup` does not render or apply Traefik artifacts as a stage.
-- [ ] Implement TLS stage
-  Current repo state: ACME/TLS paths are modeled in templates and state, but `setup` does not provision or verify TLS yet.
-- [ ] Implement public reachability stage
-  Current repo state: `status --full` exposes a public HTTPS probe, but `setup` does not run it as a stage.
-- [ ] Implement X webhook registration stage
-  Current repo state: `setup_state.json` includes `x_webhook`, but no webhook registration call is implemented.
-- [ ] Implement model warmup stage
-  Current repo state: the standalone `warmup` subcommand exists and marks the `warmup` stage done, but `setup` does not invoke it automatically.
-- [ ] Implement app service stage
-  Current repo state: `readycheck` reads `app_service` from setup state, but `setup` does not install or start the app service stage.
+- [x] Implement DuckDNS stage
+  Current repo state: `setup` now updates DuckDNS and records the installer-owned `duckdns.txt` artifact.
+- [x] Implement Traefik stage
+  Current repo state: `setup` now renders Traefik runtime artifacts, initializes `acme.json`, and writes installer-owned service definitions as a stage.
+- [x] Implement TLS stage
+  Current repo state: `setup` now verifies HTTPS reachability as the TLS gate before proceeding to webhook registration.
+- [x] Implement public reachability stage
+  Current repo state: `setup` now records public HTTPS reachability as an executed stage.
+- [x] Implement X webhook registration stage
+  Current repo state: `setup` now ensures a matching X webhook exists and records its metadata artifact.
+- [x] Implement model warmup stage
+  Current repo state: `setup` now invokes model warmup as part of the operational stage flow.
+- [x] Implement app service stage
+  Current repo state: `setup` now installs/starts the Traefik and `dmguard` services and marks `app_service` done only after both report `Running`.
 
 ---
 

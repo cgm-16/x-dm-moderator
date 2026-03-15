@@ -92,7 +92,11 @@ GitHub repo: https://github.com/cgm-16/x-dm-moderator
 - [x] #39 Setup subcommands — deps: #36, #37, #38
 - [x] #40 Admin CLI — deps: #7, #27
 
-## Milestone 14 — End-to-End
+## Milestone 14 — Operational Setup Follow-Ups
+
+- [x] #115 Operational ingress setup flow — deps: #35, #39
+
+## Milestone 15 — End-to-End
 
 - [x] #41 Full pipeline wiring — deps: #12, #17, #21, #24, #30, #31
 - [x] #42 End-to-end acceptance tests — deps: #41
