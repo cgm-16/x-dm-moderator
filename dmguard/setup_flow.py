@@ -3,6 +3,7 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
 import json
+import time
 
 import httpx
 
@@ -32,8 +33,8 @@ OPERATIONAL_STAGE_NAMES = (
     "duckdns",
     "traefik",
     "tls",
-    "public_reachability",
     "app_service",
+    "public_reachability",
     "warmup",
     "x_webhook",
 )
@@ -61,7 +62,6 @@ def execute_setup_flow(
 ) -> None:
     public_hostname = _require_string_arg(effective_args, "public_hostname")
     duckdns_token = _require_secret(secret_values, "duckdns_token")
-    https_result: dict[str, object] | None = None
 
     _run_stage(
         state,
@@ -79,13 +79,17 @@ def execute_setup_flow(
     )
 
     def run_tls_stage() -> Sequence[Path]:
-        nonlocal https_result
-        https_result = runtime.check_public_https(public_hostname)
-        if not https_result.get("ok"):
-            raise ValueError(
-                f"HTTPS check failed: {https_result.get('error', 'unknown error')}"
-            )
-        return ()
+        deadline = time.monotonic() + 120
+        interval = 10
+        while True:
+            result = runtime.check_public_https(public_hostname)
+            if result.get("ok"):
+                return ()
+            error = result.get("error", "unknown error")
+            if time.monotonic() >= deadline:
+                raise ValueError(f"HTTPS check failed: {error}")
+            logger.log(f"TLS not ready yet ({error}), retrying in {interval}s…")
+            time.sleep(interval)
 
     _run_stage(
         state,
@@ -97,16 +101,16 @@ def execute_setup_flow(
     _run_stage(
         state,
         state_path=state_path,
-        stage_name="public_reachability",
+        stage_name="app_service",
         logger=logger,
-        action=lambda: _run_public_reachability_stage(https_result),
+        action=lambda: _run_app_service_stage(runtime),
     )
     _run_stage(
         state,
         state_path=state_path,
-        stage_name="app_service",
+        stage_name="public_reachability",
         logger=logger,
-        action=lambda: _run_app_service_stage(runtime),
+        action=lambda: _run_public_reachability_stage(public_hostname, runtime, logger),
     )
     _run_stage(
         state,
@@ -286,18 +290,28 @@ def _run_app_service_stage(runtime: SetupRuntime) -> Sequence[Path]:
 
 
 def _run_public_reachability_stage(
-    https_result: dict[str, object] | None,
+    public_hostname: str,
+    runtime: SetupRuntime,
+    logger: SetupLogger,
 ) -> Sequence[Path]:
-    if https_result is None:
-        raise ValueError("TLS check result missing")
-
-    # 400 is expected when the webhook endpoint receives a bare GET without
-    # a valid X CRC payload — it proves the route is publicly reachable and
-    # TLS terminates correctly even though the app rejects the request body.
-    status_code = https_result.get("status_code")
-    if status_code not in {200, 400}:
-        raise ValueError(f"Unexpected public HTTPS status code: {status_code}")
-    return ()
+    deadline = time.monotonic() + 60
+    interval = 5
+    while True:
+        result = runtime.check_public_https(public_hostname)
+        if result.get("ok"):
+            # 400 is expected when the webhook endpoint receives a bare GET without
+            # a valid X CRC payload — it proves the route is publicly reachable and
+            # TLS terminates correctly even though the app rejects the request body.
+            status_code = result.get("status_code")
+            if status_code in {200, 400}:
+                return ()
+            error = f"Unexpected public HTTPS status code: {status_code}"
+        else:
+            error = str(result.get("error", "unknown error"))
+        if time.monotonic() >= deadline:
+            raise ValueError(f"Public reachability check failed: {error}")
+        logger.log(f"App not ready yet ({error}), retrying in {interval}s…")
+        time.sleep(interval)
 
 
 def _run_warmup_stage(runtime: SetupRuntime) -> Sequence[Path]:

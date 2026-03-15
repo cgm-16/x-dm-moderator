@@ -476,7 +476,7 @@ def check_public_https_reachability(hostname: str) -> dict[str, object]:
     url = f"https://{hostname}/webhooks/x"
 
     try:
-        response = httpx.get(url, timeout=5.0, follow_redirects=False)
+        response = httpx.get(url, timeout=15.0, follow_redirects=False)
     except httpx.HTTPError as exc:
         return {"ok": False, "hostname": hostname, "error": str(exc)}
 
