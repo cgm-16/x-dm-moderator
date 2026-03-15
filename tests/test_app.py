@@ -30,9 +30,7 @@ from tests.conftest import (
 )
 
 
-def build_config(
-    *, debug: bool = False, classifier_backend: str = "fake"
-) -> AppConfig:
+def build_config(*, debug: bool = False, classifier_backend: str = "fake") -> AppConfig:
     return AppConfig(
         debug=debug,
         log_level="INFO",
