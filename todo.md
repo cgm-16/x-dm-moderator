@@ -229,8 +229,8 @@ Project: X DM Image Safety Filter Prototype (v0.1)
 - [x] Classifier stderr is captured and written to `classifier.log`
 - [x] Implement subprocess contract
 - [x] Implement fake classifier mode for early tests
-- [ ] Integrate real LlavaGuard inference
-  Current repo state: the fake classifier and subprocess contract are wired in; no real LlavaGuard inference command is integrated yet.
+- [x] Integrate real LlavaGuard inference
+  Current repo state: `classifier_backend: llavaguard` selects the CUDA-backed `AIML-TUDA/LlavaGuard-v1.2-0.5B-OV-hf` runtime while forced selftests and test fixtures still use the fake classifier path.
 - [x] Implement selftest CLI
 - [x] Add classifier contract tests
 

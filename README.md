@@ -88,7 +88,14 @@ uv run dmguard status --full
 
 ### Warm up the local classifier path
 
-The app uses `dmguard.classifier_fake` by default, so local runs do not require the real model.
+`dmguard setup` writes `classifier_backend: fake` into `config.yaml` by default. Set
+`classifier_backend: llavaguard` to run the real CUDA-backed model path instead of the
+fake classifier.
+
+The real backend uses `AIML-TUDA/LlavaGuard-v1.2-0.5B-OV-hf`, requires CUDA, and reads
+`hf_token` from `secrets.bin`. When `classifier_backend` is `llavaguard`, the same
+`warmup` command exercises the real model and fails clearly if CUDA or the Hugging Face
+token is unavailable.
 
 ```bash
 uv run dmguard warmup
@@ -116,6 +123,13 @@ Run a fake classifier self-test:
 ```bash
 uv run dmguard selftest --image ./path/to/image.jpg --force-safe
 uv run dmguard selftest --video ./path/to/clip.mp4 --force-unsafe
+```
+
+Run a real classifier self-test using the configured backend:
+
+```bash
+uv run dmguard selftest --image ./path/to/image.jpg
+uv run dmguard selftest --video ./path/to/clip.mp4
 ```
 
 Manage local sender state:
