@@ -13,12 +13,13 @@ import sqlite3
 import threading
 import tomllib
 
+import pytest
 from fastapi import Request
 from fastapi.testclient import TestClient
 
 from dmguard.app import APP_VERSION, MAX_REQUEST_BODY_BYTES
 from dmguard.config import AppConfig
-from dmguard.job_machine import JobStatus
+from dmguard.job_machine import JobStage, JobStatus
 from tests.conftest import (
     StubSecretStore,
     bootstrap_database,
@@ -36,6 +37,25 @@ def build_config(*, debug: bool = False) -> AppConfig:
         public_hostname="dmguard.duckdns.org",
         acme_email="ori@example.com",
     )
+
+
+class RecordingXClient:
+    instances: list["RecordingXClient"] = []
+
+    def __init__(self, *args, **kwargs) -> None:
+        del args, kwargs
+        self.closed = False
+        self.instances.append(self)
+
+    async def __aenter__(self) -> "RecordingXClient":
+        return self
+
+    async def __aexit__(self, exc_type, exc, tb) -> None:
+        del exc_type, exc, tb
+        await self.aclose()
+
+    async def aclose(self) -> None:
+        self.closed = True
 
 
 async def fetch_all_rows(
@@ -291,6 +311,144 @@ def test_health_endpoint_returns_aggregated_status(
         "dropped_jobs_last_24h": 2,
         "last_drop_at": "2026-03-12T08:25:00Z",
     }
+
+
+def test_dispatch_moderation_returns_error_status_and_closes_x_client(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    import dmguard.app as app_module
+    from dmguard.moderator import ModerationOutcome
+
+    db_path = tmp_path / "state.db"
+    run(bootstrap_database(db_path))
+    run(insert_event_row(db_path, event_id="event-1", sender_id="sender-1"))
+    job_id = run(
+        insert_job_row(
+            db_path,
+            event_id="event-1",
+            next_run_at="2026-03-12T00:00:00Z",
+        )
+    )
+
+    RecordingXClient.instances.clear()
+
+    async def fake_moderate_job(*_args, **_kwargs) -> ModerationOutcome:
+        return ModerationOutcome(
+            outcome="error",
+            category_code="O2: Violence, Harm, or Cruelty",
+            rationale="Block sender failed",
+            block_attempted=True,
+        )
+
+    monkeypatch.setattr(app_module, "XClient", RecordingXClient)
+    monkeypatch.setattr(app_module, "moderate_job", fake_moderate_job)
+
+    job = {
+        "job_id": job_id,
+        "event_id": "event-1",
+        "sender_id": "sender-1",
+        "stage": JobStage.fetch_dm.value,
+        "attempt": 1,
+    }
+
+    async def scenario() -> tuple[JobStatus, list[tuple[object, ...]]]:
+        status = await app_module._dispatch_moderation(
+            job,
+            db_path,
+            StubSecretStore(x_access_token="access-token"),
+            ["classifier-fake"],
+            logging.getLogger("dmguard.test"),
+        )
+        rows = await fetch_all_rows(
+            db_path,
+            """
+            SELECT outcome, block_attempted
+            FROM moderation_audit
+            WHERE job_id = ?
+            """,
+            (job_id,),
+        )
+        return status, rows
+
+    status, rows = run(scenario())
+
+    assert status == JobStatus.error
+    assert rows == [("error", 1)]
+    assert len(RecordingXClient.instances) == 1
+    assert RecordingXClient.instances[0].closed is True
+
+
+def test_dispatch_moderation_records_exception_details_and_reraises(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    import dmguard.app as app_module
+    from dmguard.x_client import XApiError
+
+    db_path = tmp_path / "state.db"
+    run(bootstrap_database(db_path))
+    run(insert_event_row(db_path, event_id="event-1", sender_id="sender-1"))
+    job_id = run(
+        insert_job_row(
+            db_path,
+            event_id="event-1",
+            next_run_at="2026-03-12T00:00:00Z",
+        )
+    )
+
+    RecordingXClient.instances.clear()
+
+    async def fake_moderate_job(*_args, **_kwargs):
+        raise XApiError(
+            503,
+            'authorization: Bearer token x_access_token=secret password="open-sesame"',
+        )
+
+    monkeypatch.setattr(app_module, "XClient", RecordingXClient)
+    monkeypatch.setattr(app_module, "moderate_job", fake_moderate_job)
+
+    job = {
+        "job_id": job_id,
+        "event_id": "event-1",
+        "sender_id": "sender-1",
+        "stage": JobStage.fetch_dm.value,
+        "attempt": 2,
+    }
+
+    async def scenario() -> list[tuple[object, ...]]:
+        with pytest.raises(XApiError):
+            await app_module._dispatch_moderation(
+                job,
+                db_path,
+                StubSecretStore(x_access_token="access-token"),
+                ["classifier-fake"],
+                logging.getLogger("dmguard.test"),
+            )
+
+        return await fetch_all_rows(
+            db_path,
+            """
+            SELECT stage, attempt, error_type, error_message, http_status
+            FROM job_errors
+            WHERE job_id = ?
+            """,
+            (job_id,),
+        )
+
+    rows = run(scenario())
+
+    assert rows == [
+        (
+            JobStage.fetch_dm.value,
+            2,
+            "XApiError",
+            'authorization: [REDACTED] x_access_token=[REDACTED] password="[REDACTED]"',
+            503,
+        )
+    ]
+    assert len(RecordingXClient.instances) == 1
+    assert RecordingXClient.instances[0].closed is True
 
 
 def test_health_endpoint_reports_not_ready_when_db_unreachable(

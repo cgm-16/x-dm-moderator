@@ -33,7 +33,7 @@ from dmguard.schema import bootstrap_schema
 from dmguard.secrets import FileSecretStore, SecretStore
 from dmguard.webhook_auth import verify_x_signature
 from dmguard.worker import worker_loop
-from dmguard.x_client import XClient
+from dmguard.x_client import XApiError, XClient
 
 
 APP_VERSION = "0.1.0"
@@ -395,6 +395,29 @@ async def _enqueue_event(
             await connection.rollback()
 
 
+def _dispatch_error_message(error: Exception) -> str | None:
+    if isinstance(error, XApiError) and error.body:
+        return error.body
+
+    message = str(error)
+    return message or None
+
+
+def _dispatch_error_http_status(error: Exception) -> int | None:
+    if isinstance(error, XApiError):
+        return error.status_code
+
+    return None
+
+
+def _job_stage(job: dict[str, object]) -> str | None:
+    stage = job.get("stage")
+    if not isinstance(stage, str) or not stage:
+        return None
+
+    return stage
+
+
 async def _dispatch_moderation(
     job: dict[str, object],
     db_path: Path,
@@ -407,24 +430,24 @@ async def _dispatch_moderation(
     sender_id = str(job.get("sender_id") or "")
 
     try:
-        x_client = XClient(secret_store)
-        async with get_connection(db_path) as connection:
-            result = await moderate_job(job, connection, x_client, classifier_cmd)
-            await append_audit_row(
-                connection,
-                job_id=job_id,
-                event_id=event_id,
-                sender_id=sender_id,
-                outcome=result.outcome,
-                policy=_MODERATION_POLICY,
-                category_code=result.category_code,
-                rationale=result.rationale,
-                trigger_frame_index=result.trigger_frame_index,
-                trigger_time_sec=result.trigger_time_sec,
-                block_attempted=result.block_attempted,
-            )
-            await connection.commit()
-    except Exception:
+        async with XClient(secret_store) as x_client:
+            async with get_connection(db_path) as connection:
+                result = await moderate_job(job, connection, x_client, classifier_cmd)
+                await append_audit_row(
+                    connection,
+                    job_id=job_id,
+                    event_id=event_id,
+                    sender_id=sender_id,
+                    outcome=result.outcome,
+                    policy=_MODERATION_POLICY,
+                    category_code=result.category_code,
+                    rationale=result.rationale,
+                    trigger_frame_index=result.trigger_frame_index,
+                    trigger_time_sec=result.trigger_time_sec,
+                    block_attempted=result.block_attempted,
+                )
+                await connection.commit()
+    except Exception as error:
         logger.exception(
             "Dispatch moderation failed job_id=%s event_id=%s",
             job_id,
@@ -434,17 +457,19 @@ async def _dispatch_moderation(
             await record_job_error(
                 error_conn,
                 job_id=job_id,
-                stage=None,
+                stage=_job_stage(job),
                 attempt=int(job.get("attempt") or 0),
-                error_type=None,
-                error_message=None,
-                http_status=None,
+                error_type=type(error).__name__,
+                error_message=_dispatch_error_message(error),
+                http_status=_dispatch_error_http_status(error),
             )
             await error_conn.commit()
         raise
 
     if result.outcome == "skipped_allowlist":
         return JobStatus.skipped
+    if result.outcome == "error":
+        return JobStatus.error
 
     return JobStatus.done
 
