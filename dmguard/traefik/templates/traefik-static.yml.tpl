@@ -13,7 +13,7 @@ certificatesResolvers:
 
 providers:
   file:
-    directory: "{{TRAEFIK_DATA_DIR}}"
+    filename: "{{TRAEFIK_ROUTES_PATH}}"
     watch: true
 
 log:
