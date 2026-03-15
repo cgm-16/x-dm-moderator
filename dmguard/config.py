@@ -1,4 +1,5 @@
 from pathlib import Path
+from typing import Literal
 
 from pydantic import BaseModel, ConfigDict
 import yaml
@@ -6,11 +7,15 @@ import yaml
 from dmguard.paths import CONFIG_PATH
 
 
+ClassifierBackend = Literal["fake", "llavaguard"]
+
+
 class AppConfig(BaseModel):
     model_config = ConfigDict(extra="ignore")
 
     debug: bool
     log_level: str
+    classifier_backend: ClassifierBackend = "fake"
     port: int = 8080
     host: str = "127.0.0.1"
     debug_dashboard_port: int = 8081
@@ -27,4 +32,4 @@ def load_app_config(path: Path | None = None) -> AppConfig:
     return AppConfig.model_validate(raw_config)
 
 
-__all__ = ["AppConfig", "load_app_config"]
+__all__ = ["AppConfig", "ClassifierBackend", "load_app_config"]

@@ -30,10 +30,13 @@ from tests.conftest import (
 )
 
 
-def build_config(*, debug: bool = False) -> AppConfig:
+def build_config(
+    *, debug: bool = False, classifier_backend: str = "fake"
+) -> AppConfig:
     return AppConfig(
         debug=debug,
         log_level="INFO",
+        classifier_backend=classifier_backend,
         public_hostname="dmguard.duckdns.org",
         acme_email="ori@example.com",
     )
@@ -271,6 +274,29 @@ def test_create_app_starts_worker_loop_and_cancels_on_shutdown(
         ("recover", db_path, "dmguard"),
         ("worker", db_path, "dmguard"),
     ]
+
+
+def test_create_app_uses_configured_classifier_backend_resolver(
+    monkeypatch,
+) -> None:
+    import dmguard.app as app_module
+
+    calls: list[str] = []
+
+    def fake_build_runtime_classifier_cmd(config: AppConfig) -> tuple[str, ...]:
+        calls.append(config.classifier_backend)
+        return ("classifier-runtime",)
+
+    monkeypatch.setattr(
+        app_module,
+        "build_runtime_classifier_cmd",
+        fake_build_runtime_classifier_cmd,
+    )
+
+    app = app_module.create_app(build_config(classifier_backend="llavaguard"))
+
+    assert app is not None
+    assert calls == ["llavaguard"]
 
 
 def test_health_endpoint_returns_aggregated_status(
