@@ -34,14 +34,40 @@ def configure_cli_paths(monkeypatch: pytest.MonkeyPatch, tmp_path: Path):
             cli.SETUP_LOG_PATH,
             data_root / "duckdns.txt",
             data_root / "traefik",
+            data_root / "services",
+            data_root / "x-webhook.json",
         ),
     )
 
     return cli
 
 
-def save_state(state_path: Path, *, app_service_status: str = "pending") -> None:
+def save_state(
+    state_path: Path,
+    *,
+    stage_statuses: dict[str, str] | None = None,
+) -> None:
     from dmguard.setup_state import SetupState, StageStatus, save_setup_state
+
+    stage_statuses = stage_statuses or {}
+    done_timestamp = "2026-03-11T12:00:00+00:00"
+
+    def stage_status(stage_name: str, default: str = "pending") -> str:
+        return stage_statuses.get(stage_name, default)
+
+    def stage(
+        stage_name: str,
+        *,
+        artifacts: list[str] | None = None,
+        default: str = "pending",
+    ) -> StageStatus:
+        status = stage_status(stage_name, default)
+        return StageStatus(
+            status=status,
+            started_at=done_timestamp if status == "done" else None,
+            finished_at=done_timestamp if status == "done" else None,
+            artifacts=(artifacts or []) if status == "done" else [],
+        )
 
     save_setup_state(
         SetupState(
@@ -57,76 +83,43 @@ def save_state(state_path: Path, *, app_service_status: str = "pending") -> None
                 "acme_email": "ops@example.com",
             },
             stages={
-                "preflight": StageStatus(
-                    status="done",
-                    started_at="2026-03-11T12:00:00+00:00",
-                    finished_at="2026-03-11T12:00:00+00:00",
-                    artifacts=[str(state_path)],
+                "preflight": stage(
+                    "preflight", artifacts=[str(state_path)], default="done"
                 ),
-                "local_config": StageStatus(
-                    status="done",
-                    started_at="2026-03-11T12:00:00+00:00",
-                    finished_at="2026-03-11T12:00:00+00:00",
+                "local_config": stage(
+                    "local_config",
                     artifacts=[str(state_path.parent / "config.yaml")],
+                    default="done",
                 ),
-                "x_auth": StageStatus(
-                    status="done",
-                    started_at="2026-03-11T12:00:00+00:00",
-                    finished_at="2026-03-11T12:00:00+00:00",
+                "x_auth": stage(
+                    "x_auth",
                     artifacts=[str(state_path.parent / "secrets.bin")],
+                    default="done",
                 ),
-                "duckdns": StageStatus(
-                    status="pending",
-                    started_at=None,
-                    finished_at=None,
-                    artifacts=[],
+                "duckdns": stage(
+                    "duckdns",
+                    artifacts=[str(state_path.parent / "duckdns.txt")],
                 ),
-                "traefik": StageStatus(
-                    status="pending",
-                    started_at=None,
-                    finished_at=None,
-                    artifacts=[],
+                "traefik": stage(
+                    "traefik",
+                    artifacts=[
+                        str(state_path.parent / "traefik" / "traefik-static.yml"),
+                        str(state_path.parent / "traefik" / "routes.yml"),
+                        str(state_path.parent / "traefik" / "acme.json"),
+                        str(state_path.parent / "services" / "traefik-service.json"),
+                        str(state_path.parent / "services" / "dmguard-service.json"),
+                    ],
                 ),
-                "tls": StageStatus(
-                    status="pending",
-                    started_at=None,
-                    finished_at=None,
-                    artifacts=[],
+                "tls": stage("tls"),
+                "public_reachability": stage("public_reachability"),
+                "x_webhook": stage(
+                    "x_webhook",
+                    artifacts=[str(state_path.parent / "x-webhook.json")],
                 ),
-                "public_reachability": StageStatus(
-                    status="pending",
-                    started_at=None,
-                    finished_at=None,
-                    artifacts=[],
-                ),
-                "x_webhook": StageStatus(
-                    status="pending",
-                    started_at=None,
-                    finished_at=None,
-                    artifacts=[],
-                ),
-                "warmup": StageStatus(
-                    status="pending",
-                    started_at=None,
-                    finished_at=None,
-                    artifacts=[],
-                ),
-                "app_service": StageStatus(
-                    status=app_service_status,
-                    started_at=(
-                        "2026-03-11T12:00:00+00:00"
-                        if app_service_status == "done"
-                        else None
-                    ),
-                    finished_at=(
-                        "2026-03-11T12:00:00+00:00"
-                        if app_service_status == "done"
-                        else None
-                    ),
-                    artifacts=[],
-                ),
+                "warmup": stage("warmup"),
+                "app_service": stage("app_service"),
             },
-            updated_at="2026-03-11T12:00:00+00:00",
+            updated_at=done_timestamp,
         ),
         state_path,
     )
@@ -186,6 +179,32 @@ def write_config_file(path: Path, *, classifier_backend: str = "fake") -> None:
     )
 
 
+def write_operational_artifacts(data_root: Path) -> None:
+    (data_root / "duckdns.txt").write_text("dmguard\n", encoding="utf-8")
+    (data_root / "traefik").mkdir(parents=True, exist_ok=True)
+    (data_root / "traefik" / "traefik-static.yml").write_text(
+        "entryPoint=:443\n", encoding="utf-8"
+    )
+    (data_root / "traefik" / "routes.yml").write_text(
+        "http:\n  routers:\n    webhook: {}\n",
+        encoding="utf-8",
+    )
+    (data_root / "traefik" / "acme.json").write_text("{}", encoding="utf-8")
+    (data_root / "services").mkdir(parents=True, exist_ok=True)
+    (data_root / "services" / "traefik-service.json").write_text(
+        '{"name":"XDMModeratorTraefik"}',
+        encoding="utf-8",
+    )
+    (data_root / "services" / "dmguard-service.json").write_text(
+        '{"name":"XDMModerator"}',
+        encoding="utf-8",
+    )
+    (data_root / "x-webhook.json").write_text(
+        '{"id":"wh-1","url":"https://dmguard.duckdns.org/webhooks/x","valid":true}',
+        encoding="utf-8",
+    )
+
+
 async def seed_sender_state(db_path: Path) -> None:
     from dmguard.db import get_connection
     from dmguard.repo_senders import (
@@ -225,6 +244,7 @@ def test_build_parser_recognizes_cli_subcommands() -> None:
         ).classifier_backend
         == "llavaguard"
     )
+    assert parser.parse_args(["setup", "--x-user-id", "user-1"]).x_user_id == "user-1"
     assert parser.parse_args(["reset", "--force"]).command == "reset"
     assert parser.parse_args(["warmup"]).command == "warmup"
     assert parser.parse_args(["status"]).command == "status"
@@ -262,7 +282,7 @@ def test_setup_collects_expected_inputs_and_persists_outputs(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
     cli = configure_cli_paths(monkeypatch, tmp_path)
-    text_prompts = iter(["dmguard.duckdns.org", "ops@example.com"])
+    text_prompts = iter(["dmguard.duckdns.org", "ops@example.com", "user-id"])
     secret_prompts = iter(
         [
             "duckdns-token",
@@ -271,9 +291,18 @@ def test_setup_collects_expected_inputs_and_persists_outputs(
             "hf-token",
         ]
     )
+    calls: list[tuple[dict[str, object], dict[str, str]]] = []
 
     monkeypatch.setattr("builtins.input", lambda _: next(text_prompts))
     monkeypatch.setattr(cli.getpass, "getpass", lambda _: next(secret_prompts))
+    monkeypatch.setattr(cli.sys, "platform", "win32")
+    monkeypatch.setattr(
+        cli,
+        "execute_setup_flow",
+        lambda state, *, state_path, effective_args, secret_values, logger, runtime: (
+            calls.append((effective_args, secret_values))
+        ),
+    )
 
     exit_code = cli.main(["setup"])
 
@@ -282,6 +311,27 @@ def test_setup_collects_expected_inputs_and_persists_outputs(
     saved_secrets = json.loads(cli.SECRETS_PATH.read_text(encoding="utf-8"))
 
     assert exit_code == 0
+    assert calls == [
+        (
+            {
+                "debug": False,
+                "log_level": "INFO",
+                "classifier_backend": "fake",
+                "port": 8080,
+                "host": "127.0.0.1",
+                "debug_dashboard_port": 8081,
+                "public_hostname": "dmguard.duckdns.org",
+                "acme_email": "ops@example.com",
+            },
+            {
+                "duckdns_token": "duckdns-token",
+                "x_access_token": "access-token",
+                "x_consumer_secret": "consumer-secret",
+                "x_user_id": "user-id",
+                "hf_token": "hf-token",
+            },
+        )
+    ]
     assert saved_state["last_command"] == "setup"
     assert saved_state["effective_args"]["public_hostname"] == "dmguard.duckdns.org"
     assert saved_state["effective_args"]["acme_email"] == "ops@example.com"
@@ -301,6 +351,7 @@ def test_setup_collects_expected_inputs_and_persists_outputs(
         "duckdns_token": "duckdns-token",
         "x_access_token": "access-token",
         "x_consumer_secret": "consumer-secret",
+        "x_user_id": "user-id",
         "hf_token": "hf-token",
     }
 
@@ -315,6 +366,14 @@ def test_setup_uses_flags_without_prompting(
 
     monkeypatch.setattr("builtins.input", fail_prompt)
     monkeypatch.setattr(cli.getpass, "getpass", fail_prompt)
+    monkeypatch.setattr(cli.sys, "platform", "win32")
+    monkeypatch.setattr(
+        cli,
+        "execute_setup_flow",
+        lambda state, *, state_path, effective_args, secret_values, logger, runtime: (
+            None
+        ),
+    )
 
     exit_code = cli.main(
         [
@@ -329,6 +388,8 @@ def test_setup_uses_flags_without_prompting(
             "access-token",
             "--x-consumer-secret",
             "consumer-secret",
+            "--x-user-id",
+            "user-id",
             "--hf-token",
             "hf-token",
         ]
@@ -770,9 +831,23 @@ def test_readycheck_prints_pass_fail_per_check(
 ) -> None:
     cli = configure_cli_paths(monkeypatch, tmp_path)
     run(bootstrap_database(cli.DB_PATH))
+    write_config_file(cli.CONFIG_PATH)
     write_secret_file(cli.SECRETS_PATH)
     cli.SETUP_STATE_PATH.parent.mkdir(parents=True, exist_ok=True)
-    save_state(cli.SETUP_STATE_PATH, app_service_status="done")
+    write_operational_artifacts(cli.SETUP_STATE_PATH.parent)
+    save_state(
+        cli.SETUP_STATE_PATH,
+        stage_statuses={
+            "duckdns": "done",
+            "traefik": "done",
+            "tls": "done",
+            "public_reachability": "done",
+            "x_webhook": "done",
+            "warmup": "done",
+            "app_service": "done",
+        },
+    )
+    monkeypatch.setattr(cli, "get_service_status", lambda service_name: "Running")
 
     exit_code = cli.main(["readycheck"])
 
@@ -783,7 +858,10 @@ def test_readycheck_prints_pass_fail_per_check(
     assert captured.out.strip().splitlines() == [
         "PASS db reachable",
         "PASS secrets loadable",
-        "PASS worker running",
+        "PASS setup stages complete",
+        "PASS setup artifacts present",
+        "PASS traefik service running",
+        "PASS app service running",
     ]
 
 
@@ -792,9 +870,22 @@ def test_readycheck_returns_non_zero_when_app_service_is_not_ready(
 ) -> None:
     cli = configure_cli_paths(monkeypatch, tmp_path)
     run(bootstrap_database(cli.DB_PATH))
+    write_config_file(cli.CONFIG_PATH)
     write_secret_file(cli.SECRETS_PATH)
     cli.SETUP_STATE_PATH.parent.mkdir(parents=True, exist_ok=True)
-    save_state(cli.SETUP_STATE_PATH)
+    write_operational_artifacts(cli.SETUP_STATE_PATH.parent)
+    save_state(
+        cli.SETUP_STATE_PATH,
+        stage_statuses={
+            "duckdns": "done",
+            "traefik": "done",
+            "tls": "done",
+            "public_reachability": "done",
+            "x_webhook": "done",
+            "warmup": "done",
+        },
+    )
+    monkeypatch.setattr(cli, "get_service_status", lambda service_name: "Running")
 
     exit_code = cli.main(["readycheck"])
 
@@ -805,7 +896,10 @@ def test_readycheck_returns_non_zero_when_app_service_is_not_ready(
     assert captured.out.strip().splitlines() == [
         "PASS db reachable",
         "PASS secrets loadable",
-        "FAIL worker running: app_service stage is not done",
+        "FAIL setup stages complete: app_service stage is not done",
+        "PASS setup artifacts present",
+        "PASS traefik service running",
+        "PASS app service running",
     ]
 
 
@@ -820,8 +914,21 @@ def test_readycheck_end_to_end_via_subprocess(tmp_path: Path) -> None:
     app_root.mkdir(parents=True, exist_ok=True)
     data_root.mkdir(parents=True, exist_ok=True)
     run(bootstrap_database(db_path))
+    write_config_file(data_root / "config.yaml")
     write_secret_file(secrets_path)
-    save_state(state_path, app_service_status="done")
+    write_operational_artifacts(data_root)
+    save_state(
+        state_path,
+        stage_statuses={
+            "duckdns": "done",
+            "traefik": "done",
+            "tls": "done",
+            "public_reachability": "done",
+            "x_webhook": "done",
+            "warmup": "done",
+            "app_service": "done",
+        },
+    )
 
     result = subprocess.run(
         [
@@ -846,5 +953,8 @@ def test_readycheck_end_to_end_via_subprocess(tmp_path: Path) -> None:
     assert result.stdout.strip().splitlines() == [
         "PASS db reachable",
         "PASS secrets loadable",
-        "PASS worker running",
+        "PASS setup stages complete",
+        "PASS setup artifacts present",
+        "PASS traefik service running",
+        "PASS app service running",
     ]
