@@ -327,8 +327,8 @@ Project: X DM Image Safety Filter Prototype (v0.1)
 - [x] `dmguard` is also managed by Servy
 - [x] Traefik is installed/started before `dmguard`
   Current repo state: `setup` now installs both services via Servy and starts Traefik before starting `dmguard`.
-- [ ] `dmguard` only installs after TLS + public reachability succeed
-  Current repo state: service installation/start now exists, but it still runs before the HTTPS/public-reachability verification stages.
+- [x] `dmguard` only installs after TLS + public reachability succeed
+  Current repo state: `setup` now runs TLS and public-reachability verification before installing/starting the `dmguard` service.
 - [x] Generate Traefik service definition
 - [x] Generate `dmguard` service definition
 - [ ] Implement service install/start/update logic

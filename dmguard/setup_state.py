@@ -30,9 +30,9 @@ SETUP_STAGE_ORDER = (
     "traefik",
     "tls",
     "public_reachability",
-    "x_webhook",
-    "warmup",
     "app_service",
+    "warmup",
+    "x_webhook",
 )
 _STAGE_INDEX = {stage_name: index for index, stage_name in enumerate(SETUP_STAGE_ORDER)}
 _ARG_EARLIEST_STAGE = {

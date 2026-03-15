@@ -30,8 +30,11 @@ from dmguard.repo_senders import (
 from dmguard.secrets import FileSecretStore, SECRET_KEYS
 from dmguard.service_manager import get_service_status, install_service, start_service
 from dmguard.setup_flow import (
+    DUCKDNS_ARTIFACT_PATH,
     OPERATIONAL_STAGE_NAMES,
+    SERVICES_DIR,
     SetupRuntime,
+    TRAEFIK_DIR,
     X_WEBHOOK_ARTIFACT_PATH,
     execute_setup_flow,
     skip_operational_stages,
@@ -53,9 +56,6 @@ from dmguard.x_webhooks import ensure_webhook_registered
 
 SETUP_STATE_PATH = PROGRAM_DATA_DIR / "setup_state.json"
 SETUP_LOG_PATH = PROGRAM_DATA_DIR / "setup.log"
-DUCKDNS_ARTIFACT_PATH = PROGRAM_DATA_DIR / "duckdns.txt"
-TRAEFIK_DIR = PROGRAM_DATA_DIR / "traefik"
-SERVICES_DIR = PROGRAM_DATA_DIR / "services"
 KNOWN_SETUP_OUTPUTS = (
     CONFIG_PATH,
     SECRETS_PATH,
@@ -382,11 +382,14 @@ def handle_selftest(args) -> int:
 
 
 def handle_readycheck() -> int:
+    state = load_setup_state(SETUP_STATE_PATH)
     checks = [
         _build_check_result("db reachable", asyncio.run(_check_db_reachable())),
         _build_check_result("secrets loadable", _check_secrets_loadable()),
-        _build_check_result("setup stages complete", _check_required_setup_stages()),
-        _build_check_result("setup artifacts present", _check_setup_artifacts()),
+        _build_check_result(
+            "setup stages complete", _check_required_setup_stages(state)
+        ),
+        _build_check_result("setup artifacts present", _check_setup_artifacts(state)),
         _build_check_result(
             "traefik service running",
             _check_service_running("XDMModeratorTraefik"),
@@ -528,8 +531,9 @@ def _check_secrets_loadable() -> tuple[bool, str | None]:
     return True, None
 
 
-def _check_required_setup_stages() -> tuple[bool, str | None]:
-    state = load_setup_state(SETUP_STATE_PATH)
+def _check_required_setup_stages(
+    state: SetupState | None,
+) -> tuple[bool, str | None]:
     if state is None:
         return False, "setup state missing"
 
@@ -541,8 +545,9 @@ def _check_required_setup_stages() -> tuple[bool, str | None]:
     return True, None
 
 
-def _check_setup_artifacts() -> tuple[bool, str | None]:
-    state = load_setup_state(SETUP_STATE_PATH)
+def _check_setup_artifacts(
+    state: SetupState | None,
+) -> tuple[bool, str | None]:
     if state is None:
         return False, "setup state missing"
 
