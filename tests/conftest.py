@@ -23,6 +23,9 @@ class StubSecretStore(SecretStore):
         except KeyError:
             raise AssertionError(f"Unexpected secret key: {key}") from None
 
+    def update(self, key: str, value: str) -> None:
+        self._secrets[key] = value
+
 
 def run(coroutine):
     return asyncio.run(coroutine)
