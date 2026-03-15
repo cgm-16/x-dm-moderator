@@ -1,3 +1,5 @@
+from unittest.mock import patch
+
 import httpx
 import pytest
 
@@ -78,3 +80,90 @@ def test_x_client_raises_api_error_on_other_non_success_statuses() -> None:
 
     assert exc_info.value.status_code == 500
     assert exc_info.value.body == '{"error":"bad"}'
+
+
+def test_refreshes_token_on_401_and_retries() -> None:
+    from dmguard.x_client import XClient
+
+    call_count = 0
+
+    async def handler(request: httpx.Request) -> httpx.Response:
+        nonlocal call_count
+        call_count += 1
+        if call_count == 1:
+            return httpx.Response(401, text="Unauthorized")
+        return httpx.Response(200, text="ok")
+
+    store = StubSecretStore(
+        x_access_token="old-token",
+        x_client_id="cid",
+        x_refresh_token="old-rt",
+    )
+
+    def mock_refresh(client_id, refresh_token, **kwargs):
+        return {"access_token": "new-token", "refresh_token": "new-rt"}
+
+    async def perform_request() -> str:
+        async with XClient(store, transport=httpx.MockTransport(handler)) as client:
+            with patch("dmguard.x_client.refresh_access_token", mock_refresh):
+                response = await client.get("/2/test")
+                return response.text
+
+    result = run(perform_request())
+
+    assert result == "ok"
+    assert store.get("x_access_token") == "new-token"
+    assert store.get("x_refresh_token") == "new-rt"
+
+
+def test_raises_error_when_retry_after_refresh_fails() -> None:
+    from dmguard.x_client import XApiError, XClient
+
+    async def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(401, text="Unauthorized")
+
+    store = StubSecretStore(
+        x_access_token="token",
+        x_client_id="cid",
+        x_refresh_token="rt",
+    )
+
+    def mock_refresh(client_id, refresh_token, **kwargs):
+        return {"access_token": "new-token", "refresh_token": "new-rt"}
+
+    async def perform_request() -> None:
+        async with XClient(store, transport=httpx.MockTransport(handler)) as client:
+            with patch("dmguard.x_client.refresh_access_token", mock_refresh):
+                await client.get("/2/test")
+
+    with pytest.raises(XApiError) as exc_info:
+        run(perform_request())
+
+    assert exc_info.value.status_code == 401
+
+
+def test_raises_error_when_refresh_itself_fails() -> None:
+    from dmguard.x_client import XApiError, XClient
+
+    async def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(401, text="Unauthorized")
+
+    store = StubSecretStore(
+        x_access_token="token",
+        x_client_id="cid",
+        x_refresh_token="rt",
+    )
+
+    def mock_refresh(client_id, refresh_token, **kwargs):
+        raise RuntimeError("refresh exploded")
+
+    async def perform_request() -> None:
+        async with XClient(store, transport=httpx.MockTransport(handler)) as client:
+            with patch("dmguard.x_client.refresh_access_token", mock_refresh):
+                await client.get("/2/test")
+
+    with pytest.raises(XApiError) as exc_info:
+        run(perform_request())
+
+    assert exc_info.value.status_code == 401
+    assert "Token refresh failed" in exc_info.value.body
