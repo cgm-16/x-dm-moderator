@@ -55,6 +55,9 @@ class XClient:
     async def get(self, url: str, **kwargs: object) -> httpx.Response:
         return await self.request("GET", url, **kwargs)
 
+    async def post(self, url: str, **kwargs: object) -> httpx.Response:
+        return await self.request("POST", url, **kwargs)
+
 
 def _parse_retry_after(response: httpx.Response) -> int:
     retry_after = response.headers.get("Retry-After", "0")

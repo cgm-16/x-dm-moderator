@@ -479,6 +479,7 @@ def create_app(
     secret_store: SecretStore | None = None,
     db_path: Path | None = None,
     classifier_cmd: Sequence[str] | None = None,
+    worker_poll_interval_seconds: float = 5.0,
 ) -> FastAPI:
     docs_url = "/docs" if config.debug else None
     redoc_url = "/redoc" if config.debug else None
@@ -513,6 +514,7 @@ def create_app(
             worker_loop(
                 app_db_path,
                 dispatch_fn,
+                poll_interval_seconds=worker_poll_interval_seconds,
                 logger=app_logger,
             )
         )

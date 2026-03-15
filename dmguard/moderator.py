@@ -6,14 +6,20 @@ from pathlib import Path
 from typing import Literal
 
 import aiosqlite
+import httpx
 
 from dmguard.classifier_contract import ClassifierResponse
 from dmguard.classifier_runner import run_classifier
 from dmguard.frame_extractor import FrameInfo, extract_frames
 from dmguard.media_dispatch import dispatch_media
 from dmguard.media_download import cleanup_media, download_media
-from dmguard.repo_senders import get_allowed_sender, insert_allowed_sender
-from dmguard.x_client import XClient
+from dmguard.repo_senders import (
+    get_allowed_sender,
+    insert_allowed_sender,
+    record_block_failure,
+    record_block_success,
+)
+from dmguard.x_client import RateLimitedError, XApiError, XClient
 from dmguard.x_dm import DMEvent, fetch_dm_event
 
 
@@ -89,6 +95,7 @@ async def moderate_job(
 
                 extracted_frame_paths.extend(frame.path for frame in frames)
                 unsafe_outcome, frame_safe_response = await _classify_frames(
+                    connection,
                     frames,
                     event,
                     x_client,
@@ -104,6 +111,7 @@ async def moderate_job(
             response = await _classify_path(downloaded_path, classifier_cmd)
             if _is_unsafe(response):
                 return await _blocked_or_error_outcome(
+                    connection,
                     event,
                     x_client,
                     category_code=response.category,
@@ -137,6 +145,7 @@ async def moderate_job(
 
 
 async def _classify_frames(
+    connection: aiosqlite.Connection,
     frames: list[FrameInfo],
     event: DMEvent,
     x_client: XClient,
@@ -149,6 +158,7 @@ async def _classify_frames(
         if _is_unsafe(response):
             return (
                 await _blocked_or_error_outcome(
+                    connection,
                     event,
                     x_client,
                     category_code=response.category,
@@ -181,6 +191,7 @@ async def _classify_path(
 
 
 async def _blocked_or_error_outcome(
+    connection: aiosqlite.Connection,
     event: DMEvent,
     x_client: XClient,
     *,
@@ -189,7 +200,7 @@ async def _blocked_or_error_outcome(
     trigger_frame_index: int | None,
     trigger_time_sec: float | None,
 ) -> ModerationOutcome:
-    blocked = await _attempt_block_sender(event, x_client)
+    blocked = await _attempt_block_sender(connection, event, x_client)
     outcome: ModerationResult = "blocked" if blocked else "error"
     return ModerationOutcome(
         outcome=outcome,
@@ -201,14 +212,29 @@ async def _blocked_or_error_outcome(
     )
 
 
-async def _attempt_block_sender(event: DMEvent, x_client: XClient) -> bool:
-    del x_client
-    _LOGGER.warning(
-        "Block sender placeholder is not implemented sender_id=%s event_id=%s",
-        event.sender_id,
-        event.event_id,
+async def _attempt_block_sender(
+    connection: aiosqlite.Connection,
+    event: DMEvent,
+    x_client: XClient,
+) -> bool:
+    try:
+        await x_client.post(f"/2/users/{event.sender_id}/dm/block")
+    except (httpx.HTTPError, RateLimitedError, XApiError):
+        await record_block_failure(connection, event.sender_id)
+        _LOGGER.warning(
+            "Block sender request failed sender_id=%s event_id=%s",
+            event.sender_id,
+            event.event_id,
+            exc_info=True,
+        )
+        return False
+
+    await record_block_success(
+        connection,
+        sender_id=event.sender_id,
+        source_event_id=event.event_id,
     )
-    return False
+    return True
 
 
 def _get_job_sender_id(job: Mapping[str, object]) -> str | None:
