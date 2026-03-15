@@ -157,9 +157,7 @@ def write_secret_file(path: Path) -> None:
             {
                 "duckdns_token": "duckdns-token",
                 "x_access_token": "access-token",
-                "x_refresh_token": "refresh-token",
                 "x_consumer_secret": "consumer-secret",
-                "x_app_bearer": "app-bearer",
                 "x_user_id": "user-id",
                 "hf_token": "hf-token",
             }
@@ -243,9 +241,7 @@ def test_setup_collects_expected_inputs_and_persists_outputs(
         [
             "duckdns-token",
             "access-token",
-            "refresh-token",
             "consumer-secret",
-            "app-bearer",
             "hf-token",
         ]
     )
@@ -277,9 +273,7 @@ def test_setup_collects_expected_inputs_and_persists_outputs(
     assert saved_secrets == {
         "duckdns_token": "duckdns-token",
         "x_access_token": "access-token",
-        "x_refresh_token": "refresh-token",
         "x_consumer_secret": "consumer-secret",
-        "x_app_bearer": "app-bearer",
         "hf_token": "hf-token",
     }
 
@@ -306,12 +300,8 @@ def test_setup_uses_flags_without_prompting(
             "duckdns-token",
             "--x-access-token",
             "access-token",
-            "--x-refresh-token",
-            "refresh-token",
             "--x-consumer-secret",
             "consumer-secret",
-            "--x-app-bearer",
-            "app-bearer",
             "--hf-token",
             "hf-token",
         ]

@@ -9,9 +9,7 @@ SECRET_KEYS = frozenset(
     {
         "duckdns_token",
         "x_access_token",
-        "x_refresh_token",
         "x_consumer_secret",
-        "x_app_bearer",
         "x_user_id",
         "hf_token",
     }
