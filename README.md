@@ -18,7 +18,9 @@ uv sync --locked --all-groups
 
 ### Running the app locally
 
-`python -m dmguard` loads `config.yaml` and `secrets.bin` from the resolved data root. Create those files first with `uv run dmguard setup` or by writing them manually, then start the app with:
+The CLI (`uv run dmguard`) handles setup and diagnostics; `python -m dmguard` starts the server.
+
+Create `config.yaml` and `secrets.bin` in the resolved data root with `uv run dmguard setup` or by writing them manually, then start the server:
 
 ```bash
 uv run python -m dmguard
