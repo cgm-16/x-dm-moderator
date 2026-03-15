@@ -95,7 +95,7 @@ GitHub repo: https://github.com/cgm-16/x-dm-moderator
 
 - [x] #41 Full pipeline wiring — deps: #12, #17, #21, #24, #30, #31
 - [x] #42 End-to-end acceptance tests — deps: #41
-- [ ] #43 Developer README section — deps: #42
+- [x] #43 Developer README section — deps: #42
 
 ---
 
