@@ -29,8 +29,8 @@ SETUP_STAGE_ORDER = (
     "duckdns",
     "traefik",
     "tls",
-    "public_reachability",
     "app_service",
+    "public_reachability",
     "warmup",
     "x_webhook",
 )
