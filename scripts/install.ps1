@@ -97,6 +97,7 @@ if (Test-Path $traefikExe) {
     $extractDir = Join-Path $env:TEMP 'traefik-extract'
     Invoke-WebRequest -Uri $TraefikUrl -OutFile $zipPath
     Expand-Archive -Path $zipPath -DestinationPath $extractDir -Force
+    New-Item -ItemType Directory -Force -Path (Split-Path $traefikExe) | Out-Null
     Copy-Item -Force (Join-Path $extractDir 'traefik.exe') $traefikExe
     Remove-Item -Recurse -Force $extractDir
     Remove-Item -Force $zipPath

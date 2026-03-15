@@ -29,8 +29,8 @@ foreach ($svc in $ServiceNames) {
             Write-Host "  $svc was not running"
         }
         try {
-            & $servyCli remove --quiet --name $svc
-            Write-Host "  Removed $svc"
+            & $servyCli uninstall --quiet --name $svc
+            Write-Host "  Uninstalled $svc"
         } catch {
             Write-Host "  $svc was not installed"
         }

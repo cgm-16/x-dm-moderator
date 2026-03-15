@@ -259,9 +259,9 @@ def _render_traefik_files(effective_args: dict[str, object]) -> tuple[str, str]:
         "BACKEND_URL": "http://127.0.0.1:8080",
         "DEBUG_DASHBOARD_PORT": debug_dashboard_port,
         "ACME_EMAIL": acme_email,
-        "ACME_STORAGE_PATH": str(_acme_storage_path()),
-        "TRAEFIK_LOG_PATH": str(LOGS_DIR / "traefik.log"),
-        "TRAEFIK_ROUTES_PATH": str(_routes_path()),
+        "ACME_STORAGE_PATH": _acme_storage_path().as_posix(),
+        "TRAEFIK_LOG_PATH": (LOGS_DIR / "traefik.log").as_posix(),
+        "TRAEFIK_ROUTES_PATH": _routes_path().as_posix(),
     }
 
     rendered_static = render_template(_traefik_static_template_path(), template_vars)

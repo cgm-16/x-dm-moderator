@@ -86,16 +86,25 @@ def get_service_status(service_name: str) -> str:
     status_lines = [
         line.strip() for line in completed.stdout.splitlines() if line.strip()
     ]
-    return status_lines[-1] if status_lines else ""
+    last = status_lines[-1] if status_lines else ""
+    # servy-cli outputs "Service status: <Status>" — extract the value after the colon
+    return last.split(":")[-1].strip() if ":" in last else last
 
 
 def _run_servy_command(command: list[str]) -> subprocess.CompletedProcess[str]:
-    return subprocess.run(
-        command,
-        check=True,
-        capture_output=True,
-        text=True,
-    )
+    try:
+        return subprocess.run(
+            command,
+            check=True,
+            capture_output=True,
+            text=True,
+        )
+    except subprocess.CalledProcessError as exc:
+        stdout = exc.output.strip() if exc.output else "(no stdout)"
+        stderr = exc.stderr.strip() if exc.stderr else "(no stderr)"
+        raise RuntimeError(
+            f"servy-cli exited {exc.returncode} | stdout: {stdout} | stderr: {stderr}"
+        ) from exc
 
 
 __all__ = [
