@@ -10,7 +10,7 @@ from dmguard.scheduler import claim_job, complete_job, dequeue_next_job, schedul
 
 
 POLL_INTERVAL_SECONDS = 5
-DispatchFn = Callable[[dict[str, object]], Awaitable[None]]
+DispatchFn = Callable[[dict[str, object]], Awaitable[JobStatus]]
 
 
 async def _claim_next_job(db_path: Path) -> dict[str, object] | None:
@@ -32,9 +32,13 @@ async def _claim_next_job(db_path: Path) -> dict[str, object] | None:
     return claimed_job
 
 
-async def _mark_job_done(db_path: Path, job_id: int) -> None:
+async def _mark_job_done(
+    db_path: Path,
+    job_id: int,
+    status: JobStatus = JobStatus.done,
+) -> None:
     async with get_connection(db_path) as connection:
-        await complete_job(connection, job_id, JobStatus.done)
+        await complete_job(connection, job_id, status)
         await connection.commit()
 
 
@@ -94,7 +98,7 @@ async def worker_loop(
                 attempt = int(job["attempt"])
 
                 try:
-                    await dispatch_fn(job)
+                    result_status = await dispatch_fn(job)
                 except Exception:
                     await _retry_or_error(
                         db_path,
@@ -103,7 +107,7 @@ async def worker_loop(
                         worker_logger,
                     )
                 else:
-                    await _mark_job_done(db_path, job_id)
+                    await _mark_job_done(db_path, job_id, result_status)
         except asyncio.CancelledError:
             raise
         except Exception:

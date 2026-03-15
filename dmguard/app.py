@@ -1,4 +1,4 @@
-from collections.abc import Awaitable, Callable
+from collections.abc import Awaitable, Callable, Sequence
 import asyncio
 import base64
 from contextlib import asynccontextmanager, suppress
@@ -11,6 +11,7 @@ import logging
 from pathlib import Path
 import platform
 import sqlite3
+import sys
 import tomllib
 
 from fastapi import FastAPI, HTTPException, Request
@@ -20,8 +21,10 @@ from starlette.types import ASGIApp, Message, Receive, Scope, Send
 from dmguard.config import AppConfig
 from dmguard.db import get_connection
 from dmguard.job_machine import JobStage, JobStatus
+from dmguard.moderator import moderate_job
 from dmguard.paths import DB_PATH
 from dmguard.recovery import recover_stale_jobs
+from dmguard.repo_audit import append_audit_row, record_job_error
 from dmguard.repo_events import insert_event
 from dmguard.repo_jobs import insert_job
 from dmguard.repo_kv import kv_get
@@ -30,6 +33,7 @@ from dmguard.schema import bootstrap_schema
 from dmguard.secrets import FileSecretStore, SecretStore
 from dmguard.webhook_auth import verify_x_signature
 from dmguard.worker import worker_loop
+from dmguard.x_client import XClient
 
 
 APP_VERSION = "0.1.0"
@@ -37,6 +41,7 @@ MAX_REQUEST_BODY_BYTES = 1_048_576
 PACKAGE_NAME = "x-dm-moderator"
 PYPROJECT_PATH = Path(__file__).resolve().parents[1] / "pyproject.toml"
 WEBHOOK_PATH = "/webhooks/x"
+_MODERATION_POLICY = "O2_violence_harm_cruelty"
 
 
 BodyLimitExceededHandler = Callable[[Scope, bytes], Awaitable[None]]
@@ -390,16 +395,76 @@ async def _enqueue_event(
             await connection.rollback()
 
 
+async def _dispatch_moderation(
+    job: dict[str, object],
+    db_path: Path,
+    secret_store: SecretStore,
+    classifier_cmd: Sequence[str],
+    logger: logging.Logger,
+) -> JobStatus:
+    job_id = int(job["job_id"])
+    event_id = str(job["event_id"])
+    sender_id = str(job.get("sender_id") or "")
+
+    try:
+        x_client = XClient(secret_store)
+        async with get_connection(db_path) as connection:
+            result = await moderate_job(job, connection, x_client, classifier_cmd)
+            await append_audit_row(
+                connection,
+                job_id=job_id,
+                event_id=event_id,
+                sender_id=sender_id,
+                outcome=result.outcome,
+                policy=_MODERATION_POLICY,
+                category_code=result.category_code,
+                rationale=result.rationale,
+                trigger_frame_index=result.trigger_frame_index,
+                trigger_time_sec=result.trigger_time_sec,
+                block_attempted=result.block_attempted,
+            )
+            await connection.commit()
+    except Exception:
+        logger.exception(
+            "Dispatch moderation failed job_id=%s event_id=%s",
+            job_id,
+            event_id,
+        )
+        async with get_connection(db_path) as error_conn:
+            await record_job_error(
+                error_conn,
+                job_id=job_id,
+                stage=None,
+                attempt=int(job.get("attempt") or 0),
+                error_type=None,
+                error_message=None,
+                http_status=None,
+            )
+            await error_conn.commit()
+        raise
+
+    if result.outcome == "skipped_allowlist":
+        return JobStatus.skipped
+
+    return JobStatus.done
+
+
 def create_app(
     config: AppConfig,
     secret_store: SecretStore | None = None,
     db_path: Path | None = None,
+    classifier_cmd: Sequence[str] | None = None,
 ) -> FastAPI:
     docs_url = "/docs" if config.debug else None
     redoc_url = "/redoc" if config.debug else None
     openapi_url = "/openapi.json" if config.debug else None
     app_secret_store = secret_store or FileSecretStore()
     app_db_path = db_path or DB_PATH
+    app_classifier_cmd = classifier_cmd or (
+        sys.executable,
+        "-m",
+        "dmguard.classifier_fake",
+    )
     version_info = build_version_info()
     app_logger = logging.getLogger("dmguard")
 
@@ -410,11 +475,13 @@ def create_app(
             await recover_stale_jobs(connection, app_logger)
             await connection.commit()
 
-        async def dispatch_fn(job: dict[str, object]) -> None:
-            app_logger.info(
-                "Placeholder dispatch job_id=%s event_id=%s",
-                job["job_id"],
-                job["event_id"],
+        async def dispatch_fn(job: dict[str, object]) -> JobStatus:
+            return await _dispatch_moderation(
+                job,
+                app_db_path,
+                app_secret_store,
+                app_classifier_cmd,
+                app_logger,
             )
 
         task = asyncio.create_task(
