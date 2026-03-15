@@ -12,7 +12,7 @@ DMGUARD_SERVICE_NAME = "XDMModerator"
 TRAEFIK_BINARY_PATH = PROGRAM_FILES_DIR / "traefik" / "traefik.exe"
 TRAEFIK_STARTUP_DIR = TRAEFIK_BINARY_PATH.parent
 TRAEFIK_STATIC_CONFIG_PATH = PROGRAM_DATA_DIR / "traefik" / "traefik-static.yml"
-DMGUARD_BINARY_PATH = PROGRAM_FILES_DIR / "dmguard.exe"
+DMGUARD_PYTHON_PATH = PROGRAM_FILES_DIR / ".venv" / "Scripts" / "python.exe"
 
 
 class InvalidYamlError(ValueError):
@@ -60,7 +60,8 @@ def generate_dmguard_service_def() -> dict[str, str | list[str]]:
         "name": DMGUARD_SERVICE_NAME,
         "displayName": "XDMModerator",
         "description": "XDMModerator application service",
-        "path": str(DMGUARD_BINARY_PATH),
+        "path": str(DMGUARD_PYTHON_PATH),
+        "params": "-m dmguard",
         "startupDir": str(PROGRAM_FILES_DIR),
         "startupType": "Automatic",
         "stdout": str(LOGS_DIR / "dmguard-service.out.log"),
