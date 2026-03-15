@@ -11,13 +11,13 @@ import logging
 from pathlib import Path
 import platform
 import sqlite3
-import sys
 import tomllib
 
 from fastapi import FastAPI, HTTPException, Request
 from starlette.responses import JSONResponse, Response
 from starlette.types import ASGIApp, Message, Receive, Scope, Send
 
+from dmguard.classifier_backend import build_runtime_classifier_cmd
 from dmguard.config import AppConfig
 from dmguard.db import get_connection
 from dmguard.job_machine import JobStage, JobStatus
@@ -486,11 +486,7 @@ def create_app(
     openapi_url = "/openapi.json" if config.debug else None
     app_secret_store = secret_store or FileSecretStore()
     app_db_path = db_path or DB_PATH
-    app_classifier_cmd = classifier_cmd or (
-        sys.executable,
-        "-m",
-        "dmguard.classifier_fake",
-    )
+    app_classifier_cmd = classifier_cmd or build_runtime_classifier_cmd(config)
     version_info = build_version_info()
     app_logger = logging.getLogger("dmguard")
 

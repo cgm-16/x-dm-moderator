@@ -49,6 +49,7 @@ def save_state(state_path: Path, *, app_service_status: str = "pending") -> None
             effective_args={
                 "debug": False,
                 "log_level": "INFO",
+                "classifier_backend": "fake",
                 "port": 8080,
                 "host": "127.0.0.1",
                 "debug_dashboard_port": 8081,
@@ -166,6 +167,25 @@ def write_secret_file(path: Path) -> None:
     )
 
 
+def write_config_file(path: Path, *, classifier_backend: str = "fake") -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(
+        yaml.safe_dump(
+            {
+                "debug": False,
+                "log_level": "INFO",
+                "classifier_backend": classifier_backend,
+                "port": 8080,
+                "host": "127.0.0.1",
+                "debug_dashboard_port": 8081,
+                "public_hostname": "dmguard.duckdns.org",
+                "acme_email": "ops@example.com",
+            }
+        ),
+        encoding="utf-8",
+    )
+
+
 async def seed_sender_state(db_path: Path) -> None:
     from dmguard.db import get_connection
     from dmguard.repo_senders import (
@@ -199,6 +219,11 @@ def test_build_parser_recognizes_cli_subcommands() -> None:
     parser = build_parser()
 
     assert parser.parse_args(["setup"]).command == "setup"
+    assert (
+        parser.parse_args(["setup", "--classifier-backend", "llavaguard"])
+        .classifier_backend
+        == "llavaguard"
+    )
     assert parser.parse_args(["reset", "--force"]).command == "reset"
     assert parser.parse_args(["warmup"]).command == "warmup"
     assert parser.parse_args(["status"]).command == "status"
@@ -264,6 +289,7 @@ def test_setup_collects_expected_inputs_and_persists_outputs(
     assert saved_config == {
         "debug": False,
         "log_level": "INFO",
+        "classifier_backend": "fake",
         "port": 8080,
         "host": "127.0.0.1",
         "debug_dashboard_port": 8081,
@@ -436,6 +462,44 @@ def test_warmup_invokes_setup_warmup(
     }
 
 
+def test_run_setup_warmup_uses_configured_llavaguard_backend(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    from dmguard.classifier_contract import ClassifierResponse
+
+    cli = configure_cli_paths(monkeypatch, tmp_path)
+    write_config_file(cli.CONFIG_PATH, classifier_backend="llavaguard")
+    calls: list[tuple[dict[str, object], tuple[str, ...]]] = []
+
+    def fake_run_classifier(
+        input_data: dict[str, object],
+        classifier_cmd: list[str] | tuple[str, ...],
+    ) -> ClassifierResponse:
+        calls.append((input_data, tuple(classifier_cmd)))
+        return ClassifierResponse(
+            policy="O2_violence_harm_cruelty",
+            rating="safe",
+            category="NA: None applying",
+            rationale="Warmup ok",
+        )
+
+    monkeypatch.setattr(cli, "run_classifier", fake_run_classifier)
+
+    payload = cli.run_setup_warmup()
+
+    assert payload["rating"] == "safe"
+    assert calls == [
+        (
+            {
+                "mode": "image",
+                "files": ["warmup.jpg"],
+                "policy": "O2_violence_harm_cruelty",
+            },
+            (sys.executable, "-m", "dmguard.classifier_llavaguard"),
+        )
+    ]
+
+
 def test_allowlist_add_inserts_row(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path, capsys
 ) -> None:
@@ -549,6 +613,155 @@ def test_selftest_missing_file_fails_with_clear_error(
     assert captured.out == ""
     assert str(missing_path) in captured.err
     assert "does not exist" in captured.err
+
+
+def test_selftest_without_force_uses_configured_llavaguard_backend(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, capsys
+) -> None:
+    from dmguard.classifier_contract import ClassifierResponse
+
+    cli = configure_cli_paths(monkeypatch, tmp_path)
+    write_config_file(cli.CONFIG_PATH, classifier_backend="llavaguard")
+    image_path = tmp_path / "image.jpg"
+    image_path.write_text("image-bytes", encoding="utf-8")
+    calls: list[tuple[dict[str, object], tuple[str, ...]]] = []
+
+    def fake_run_classifier(
+        input_data: dict[str, object],
+        classifier_cmd: list[str] | tuple[str, ...],
+    ) -> ClassifierResponse:
+        calls.append((input_data, tuple(classifier_cmd)))
+        return ClassifierResponse(
+            policy="O2_violence_harm_cruelty",
+            rating="safe",
+            category="NA: None applying",
+            rationale="Configured backend",
+        )
+
+    monkeypatch.setattr(cli, "run_classifier", fake_run_classifier)
+
+    exit_code = cli.main(["selftest", "--image", str(image_path)])
+
+    captured = capsys.readouterr()
+
+    assert exit_code == 0
+    assert captured.err == ""
+    assert "result=safe" in captured.out
+    assert calls == [
+        (
+            {
+                "mode": "image",
+                "files": [str(image_path)],
+                "policy": "O2_violence_harm_cruelty",
+            },
+            (sys.executable, "-m", "dmguard.classifier_llavaguard"),
+        )
+    ]
+
+
+def test_selftest_force_safe_uses_fake_backend_even_with_llavaguard_config(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, capsys
+) -> None:
+    from dmguard.classifier_contract import ClassifierResponse
+
+    cli = configure_cli_paths(monkeypatch, tmp_path)
+    write_config_file(cli.CONFIG_PATH, classifier_backend="llavaguard")
+    image_path = tmp_path / "image.jpg"
+    image_path.write_text("image-bytes", encoding="utf-8")
+    calls: list[tuple[dict[str, object], tuple[str, ...]]] = []
+
+    def fake_run_classifier(
+        input_data: dict[str, object],
+        classifier_cmd: list[str] | tuple[str, ...],
+    ) -> ClassifierResponse:
+        calls.append((input_data, tuple(classifier_cmd)))
+        return ClassifierResponse(
+            policy="O2_violence_harm_cruelty",
+            rating="safe",
+            category="NA: None applying",
+            rationale="Forced fake backend",
+        )
+
+    monkeypatch.setattr(cli, "run_classifier", fake_run_classifier)
+
+    exit_code = cli.main(["selftest", "--image", str(image_path), "--force-safe"])
+
+    captured = capsys.readouterr()
+
+    assert exit_code == 0
+    assert captured.err == ""
+    assert "result=safe" in captured.out
+    assert calls == [
+        (
+            {
+                "mode": "image",
+                "files": [str(image_path)],
+                "policy": "O2_violence_harm_cruelty",
+            },
+            (sys.executable, "-m", "dmguard.classifier_fake", "--force-safe"),
+        )
+    ]
+
+
+def test_selftest_video_with_llavaguard_backend_classifies_extracted_frames(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, capsys
+) -> None:
+    from dmguard.classifier_contract import ClassifierResponse
+    from dmguard.frame_extractor import FrameInfo
+
+    cli = configure_cli_paths(monkeypatch, tmp_path)
+    write_config_file(cli.CONFIG_PATH, classifier_backend="llavaguard")
+    video_path = tmp_path / "clip.mp4"
+    frame_path = tmp_path / "clip-frame-0.jpg"
+    video_path.write_text("video-bytes", encoding="utf-8")
+    frame_path.write_text("frame-bytes", encoding="utf-8")
+    calls: list[tuple[dict[str, object], tuple[str, ...]]] = []
+    cleaned_paths: list[Path] = []
+
+    def fake_extract_frames(video_path_arg: Path, event_id: str) -> list[FrameInfo]:
+        assert video_path_arg == video_path
+        assert event_id == video_path.stem
+        return [FrameInfo(path=frame_path, time_sec=1.0, index=0)]
+
+    def fake_cleanup_media(paths: list[Path]) -> None:
+        cleaned_paths.extend(paths)
+
+    def fake_run_classifier(
+        input_data: dict[str, object],
+        classifier_cmd: list[str] | tuple[str, ...],
+    ) -> ClassifierResponse:
+        calls.append((input_data, tuple(classifier_cmd)))
+        return ClassifierResponse(
+            policy="O2_violence_harm_cruelty",
+            rating="unsafe",
+            category="O2: Violence, Harm, or Cruelty",
+            rationale="Unsafe frame",
+            trigger_frame_index=0,
+        )
+
+    monkeypatch.setattr(cli, "extract_frames", fake_extract_frames)
+    monkeypatch.setattr(cli, "cleanup_media", fake_cleanup_media)
+    monkeypatch.setattr(cli, "run_classifier", fake_run_classifier)
+
+    exit_code = cli.main(["selftest", "--video", str(video_path)])
+
+    captured = capsys.readouterr()
+
+    assert exit_code == 0
+    assert captured.err == ""
+    assert "result=unsafe" in captured.out
+    assert "trigger_frame_index=0" in captured.out
+    assert calls == [
+        (
+            {
+                "mode": "video",
+                "files": [str(frame_path)],
+                "policy": "O2_violence_harm_cruelty",
+            },
+            (sys.executable, "-m", "dmguard.classifier_llavaguard"),
+        )
+    ]
+    assert cleaned_paths == [frame_path]
 
 
 def test_readycheck_prints_pass_fail_per_check(

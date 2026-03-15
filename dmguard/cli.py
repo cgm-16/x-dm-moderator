@@ -12,8 +12,15 @@ import sys
 import httpx
 import yaml
 
+from dmguard.classifier_backend import (
+    LLAVAGUARD_CLASSIFIER_BASE_CMD,
+    build_fake_classifier_cmd,
+    load_runtime_classifier_cmd,
+)
 from dmguard.classifier_runner import run_classifier
 from dmguard.db import get_connection
+from dmguard.frame_extractor import extract_frames
+from dmguard.media_download import cleanup_media
 from dmguard.paths import CONFIG_PATH, DB_PATH, PROGRAM_DATA_DIR, SECRETS_PATH
 from dmguard.repo_senders import (
     delete_allowed_sender,
@@ -46,18 +53,10 @@ KNOWN_SETUP_OUTPUTS = (
     DUCKDNS_ARTIFACT_PATH,
     TRAEFIK_DIR,
 )
-CLASSIFIER_FAKE_BASE_CMD = (
-    sys.executable,
-    "-m",
-    "dmguard.classifier_fake",
-)
-DEFAULT_WARMUP_CLASSIFIER_CMD = (
-    *CLASSIFIER_FAKE_BASE_CMD,
-    "--force-safe",
-)
 SETUP_CONFIG_DEFAULTS = {
     "debug": False,
     "log_level": "INFO",
+    "classifier_backend": "fake",
     "port": 8080,
     "host": "127.0.0.1",
     "debug_dashboard_port": 8081,
@@ -81,6 +80,11 @@ def build_parser() -> ArgumentParser:
     setup_parser = subparsers.add_parser("setup")
     setup_parser.add_argument("--debug", action="store_true")
     setup_parser.add_argument("--log-level", default=SETUP_CONFIG_DEFAULTS["log_level"])
+    setup_parser.add_argument(
+        "--classifier-backend",
+        choices=("fake", "llavaguard"),
+        default=SETUP_CONFIG_DEFAULTS["classifier_backend"],
+    )
     setup_parser.add_argument("--port", type=int, default=SETUP_CONFIG_DEFAULTS["port"])
     setup_parser.add_argument("--host", default=SETUP_CONFIG_DEFAULTS["host"])
     setup_parser.add_argument(
@@ -174,6 +178,7 @@ def handle_setup(args) -> int:
     effective_args = {
         "debug": args.debug,
         "log_level": args.log_level,
+        "classifier_backend": args.classifier_backend,
         "port": args.port,
         "host": args.host,
         "debug_dashboard_port": args.debug_dashboard_port,
@@ -317,20 +322,27 @@ def handle_selftest(args) -> int:
         raise ValueError(f"Selftest path is not a file: {target_path}")
 
     mode = "image" if args.image is not None else "video"
-    classifier_cmd = list(CLASSIFIER_FAKE_BASE_CMD)
-    if args.force_safe:
-        classifier_cmd.append("--force-safe")
-    if args.force_unsafe:
-        classifier_cmd.append("--force-unsafe")
+    classifier_cmd = _resolve_selftest_classifier_cmd(args)
+    input_paths = [target_path]
 
-    response = run_classifier(
-        {
-            "mode": mode,
-            "files": [str(target_path)],
-            "policy": "O2_violence_harm_cruelty",
-        },
-        classifier_cmd,
-    )
+    if mode == "video" and tuple(classifier_cmd) == LLAVAGUARD_CLASSIFIER_BASE_CMD:
+        frames = extract_frames(target_path, target_path.stem)
+        if not frames:
+            raise ValueError(f"No classifier frames extracted for selftest: {target_path}")
+        input_paths = [frame.path for frame in frames]
+
+    try:
+        response = run_classifier(
+            {
+                "mode": mode,
+                "files": [str(path) for path in input_paths],
+                "policy": "O2_violence_harm_cruelty",
+            },
+            classifier_cmd,
+        )
+    finally:
+        if input_paths != [target_path]:
+            cleanup_media(input_paths)
 
     print(f"result={response.rating} file={target_path} category={response.category}")
     if response.trigger_frame_index is not None:
@@ -363,9 +375,19 @@ def run_setup_warmup() -> dict[str, object]:
             "files": ["warmup.jpg"],
             "policy": "O2_violence_harm_cruelty",
         },
-        DEFAULT_WARMUP_CLASSIFIER_CMD,
+        load_runtime_classifier_cmd(CONFIG_PATH),
     )
     return response.model_dump(mode="json")
+
+
+def _resolve_selftest_classifier_cmd(args) -> tuple[str, ...]:
+    if args.force_safe or args.force_unsafe:
+        return build_fake_classifier_cmd(
+            force_safe=args.force_safe,
+            force_unsafe=args.force_unsafe,
+        )
+
+    return load_runtime_classifier_cmd(CONFIG_PATH)
 
 
 def build_remote_checks(state: SetupState | None) -> dict[str, object]:

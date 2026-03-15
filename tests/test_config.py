@@ -18,6 +18,7 @@ def test_load_app_config_parses_valid_yaml(tmp_path: Path) -> None:
         """
 debug: true
 log_level: INFO
+classifier_backend: llavaguard
 port: 9000
 host: 0.0.0.0
 debug_dashboard_port: 9001
@@ -31,6 +32,7 @@ acme_email: ori@example.com
     assert config == AppConfig(
         debug=True,
         log_level="INFO",
+        classifier_backend="llavaguard",
         port=9000,
         host="0.0.0.0",
         debug_dashboard_port=9001,
@@ -54,6 +56,7 @@ acme_email: ori@example.com
 
     config = load_app_config(config_path)
 
+    assert config.classifier_backend == "fake"
     assert config.port == 8080
     assert config.host == "127.0.0.1"
     assert config.debug_dashboard_port == 8081
@@ -118,3 +121,23 @@ acme_email: ori@example.com
     loaded = config.load_app_config()
 
     assert loaded.public_hostname == "dmguard.duckdns.org"
+
+
+def test_load_app_config_rejects_unknown_classifier_backend(tmp_path: Path) -> None:
+    from dmguard.config import load_app_config
+
+    config_path = write_config(
+        tmp_path,
+        """
+debug: true
+log_level: INFO
+classifier_backend: unsupported
+public_hostname: dmguard.duckdns.org
+acme_email: ori@example.com
+""".strip(),
+    )
+
+    with pytest.raises(ValidationError) as exc_info:
+        load_app_config(config_path)
+
+    assert "classifier_backend" in str(exc_info.value)
