@@ -50,7 +50,7 @@ def setup_inputs() -> tuple[dict[str, object], dict[str, str]]:
 def write_templates(template_dir: Path) -> None:
     template_dir.mkdir(parents=True, exist_ok=True)
     (template_dir / "traefik-static.yml.tpl").write_text(
-        "entryPoint: ':443'\nemail: '{{ACME_EMAIL}}'\nstorage: '{{ACME_STORAGE_PATH}}'\ndata_dir: '{{TRAEFIK_DATA_DIR}}'\n",
+        "entryPoint: ':443'\nemail: '{{ACME_EMAIL}}'\nstorage: '{{ACME_STORAGE_PATH}}'\nroutes: '{{TRAEFIK_ROUTES_PATH}}'\n",
         encoding="utf-8",
     )
     (template_dir / "routes-normal.yml.tpl").write_text(

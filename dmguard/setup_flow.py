@@ -13,7 +13,7 @@ from dmguard.edge import (
     generate_traefik_service_def,
     write_routes_atomically,
 )
-from dmguard.paths import LOGS_DIR, PROGRAM_DATA_DIR, PROGRAM_FILES_DIR
+from dmguard.paths import LOGS_DIR, PROGRAM_DATA_DIR
 from dmguard.service_manager import (
     SERVICES_DIR,
     write_service_definition,
@@ -26,7 +26,7 @@ from dmguard.x_webhooks import build_public_webhook_url
 
 DUCKDNS_ARTIFACT_PATH = PROGRAM_DATA_DIR / "duckdns.txt"
 TRAEFIK_DIR = PROGRAM_DATA_DIR / "traefik"
-TRAEFIK_TEMPLATES_DIR = PROGRAM_FILES_DIR / "traefik" / "templates"
+TRAEFIK_TEMPLATES_DIR = Path(__file__).resolve().parent / "traefik" / "templates"
 X_WEBHOOK_ARTIFACT_PATH = PROGRAM_DATA_DIR / "x-webhook.json"
 OPERATIONAL_STAGE_NAMES = (
     "duckdns",
@@ -261,7 +261,7 @@ def _render_traefik_files(effective_args: dict[str, object]) -> tuple[str, str]:
         "ACME_EMAIL": acme_email,
         "ACME_STORAGE_PATH": str(_acme_storage_path()),
         "TRAEFIK_LOG_PATH": str(LOGS_DIR / "traefik.log"),
-        "TRAEFIK_DATA_DIR": str(TRAEFIK_DIR),
+        "TRAEFIK_ROUTES_PATH": str(_routes_path()),
     }
 
     rendered_static = render_template(_traefik_static_template_path(), template_vars)

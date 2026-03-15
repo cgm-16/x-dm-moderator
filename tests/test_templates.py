@@ -22,7 +22,7 @@ def template_vars() -> dict[str, str]:
         "ACME_EMAIL": "ops@example.com",
         "ACME_STORAGE_PATH": "C:/ProgramData/XDMModerator/traefik/acme.json",
         "TRAEFIK_LOG_PATH": "C:/ProgramData/XDMModerator/logs/traefik.log",
-        "TRAEFIK_DATA_DIR": "C:/ProgramData/XDMModerator/traefik",
+        "TRAEFIK_ROUTES_PATH": "C:/ProgramData/XDMModerator/traefik/routes.yml",
     }
 
 
@@ -141,8 +141,8 @@ def test_repo_static_template_renders_to_valid_yaml() -> None:
         == "ops@example.com"
     )
     assert (
-        parsed["providers"]["file"]["directory"]
-        == "C:/ProgramData/XDMModerator/traefik"
+        parsed["providers"]["file"]["filename"]
+        == "C:/ProgramData/XDMModerator/traefik/routes.yml"
     )
     assert parsed["log"]["filePath"] == "C:/ProgramData/XDMModerator/logs/traefik.log"
 

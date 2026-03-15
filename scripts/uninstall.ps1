@@ -23,13 +23,13 @@ Write-Host '--- Stopping and removing services ---'
 foreach ($svc in $ServiceNames) {
     if (Test-Path $servyCli) {
         try {
-            & $servyCli stop --quiet --name $svc 2>$null
+            & $servyCli stop --quiet --name $svc
             Write-Host "  Stopped $svc"
         } catch {
             Write-Host "  $svc was not running"
         }
         try {
-            & $servyCli remove --quiet --name $svc 2>$null
+            & $servyCli remove --quiet --name $svc
             Write-Host "  Removed $svc"
         } catch {
             Write-Host "  $svc was not installed"

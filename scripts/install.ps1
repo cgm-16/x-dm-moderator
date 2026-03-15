@@ -12,6 +12,7 @@ $ErrorActionPreference = 'Stop'
 
 $ProgramFilesDir = 'C:\Program Files\XDMModerator'
 $ProgramDataDir  = 'C:\ProgramData\XDMModerator'
+# Sole version pin for Traefik — update here when upgrading.
 $TraefikVersion  = '3.3.6'
 $TraefikUrl      = "https://github.com/traefik/traefik/releases/download/v${TraefikVersion}/traefik_v${TraefikVersion}_windows_amd64.zip"
 $FirewallRuleName = 'XDMModerator-HTTPS-In'
@@ -47,7 +48,6 @@ Write-Host '  Servy: found'
 Write-Host '--- Creating directories ---'
 
 New-Item -ItemType Directory -Force -Path $ProgramFilesDir | Out-Null
-New-Item -ItemType Directory -Force -Path "$ProgramFilesDir\traefik\templates" | Out-Null
 New-Item -ItemType Directory -Force -Path $ProgramDataDir | Out-Null
 New-Item -ItemType Directory -Force -Path "$ProgramDataDir\traefik" | Out-Null
 New-Item -ItemType Directory -Force -Path "$ProgramDataDir\logs" | Out-Null
@@ -84,14 +84,6 @@ try {
 } finally {
     Pop-Location
 }
-
-# --- Template files -----------------------------------------------------------
-
-Write-Host '--- Copying template files ---'
-
-$templateSrc = Join-Path $ProgramFilesDir 'dmguard' 'traefik' 'templates'
-$templateDst = Join-Path $ProgramFilesDir 'traefik' 'templates'
-Copy-Item -Force "$templateSrc\*" $templateDst
 
 # --- Traefik binary -----------------------------------------------------------
 
