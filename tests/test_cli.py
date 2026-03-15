@@ -160,6 +160,7 @@ def write_secret_file(path: Path) -> None:
                 "x_refresh_token": "refresh-token",
                 "x_consumer_secret": "consumer-secret",
                 "x_app_bearer": "app-bearer",
+                "x_user_id": "user-id",
                 "hf_token": "hf-token",
             }
         ),
