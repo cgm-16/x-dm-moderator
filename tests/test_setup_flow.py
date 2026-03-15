@@ -131,8 +131,8 @@ def test_execute_setup_flow_marks_operational_stages_done_and_writes_artifacts(
     assert calls == [
         ("duckdns", "dmguard.duckdns.org"),
         ("install", "XDMModeratorTraefik"),
-        ("install", "XDMModerator"),
         ("start", "XDMModeratorTraefik"),
+        ("install", "XDMModerator"),
         ("start", "XDMModerator"),
     ]
     assert (tmp_path / "duckdns.txt").exists()
@@ -225,7 +225,12 @@ def test_execute_setup_flow_fails_when_service_does_not_reach_running_state(
         get_service_status=lambda service_name: (
             "Stopped" if service_name == "XDMModerator" else "Running"
         ),
-        check_public_https=lambda hostname: {"ok": True, "hostname": hostname},
+        check_public_https=lambda hostname: {
+            "ok": True,
+            "hostname": hostname,
+            "status_code": 400,
+            "url": f"https://{hostname}/webhooks/x",
+        },
         run_warmup=lambda: {"rating": "safe"},
         ensure_webhook=lambda webhook_url: {
             "id": "wh-1",

@@ -33,9 +33,9 @@ OPERATIONAL_STAGE_NAMES = (
     "traefik",
     "tls",
     "public_reachability",
-    "x_webhook",
-    "warmup",
     "app_service",
+    "warmup",
+    "x_webhook",
 )
 
 
@@ -75,14 +75,7 @@ def execute_setup_flow(
         state_path=state_path,
         stage_name="traefik",
         logger=logger,
-        action=lambda: _run_traefik_stage(effective_args),
-    )
-    _run_stage(
-        state,
-        state_path=state_path,
-        stage_name="app_service",
-        logger=logger,
-        action=lambda: _run_app_service_stage(runtime),
+        action=lambda: _run_traefik_stage(effective_args, runtime),
     )
 
     def run_tls_stage() -> Sequence[Path]:
@@ -107,6 +100,13 @@ def execute_setup_flow(
         stage_name="public_reachability",
         logger=logger,
         action=lambda: _run_public_reachability_stage(https_result),
+    )
+    _run_stage(
+        state,
+        state_path=state_path,
+        stage_name="app_service",
+        logger=logger,
+        action=lambda: _run_app_service_stage(runtime),
     )
     _run_stage(
         state,
@@ -213,7 +213,10 @@ def _run_duckdns_stage(
     return (DUCKDNS_ARTIFACT_PATH,)
 
 
-def _run_traefik_stage(effective_args: dict[str, object]) -> Sequence[Path]:
+def _run_traefik_stage(
+    effective_args: dict[str, object],
+    runtime: SetupRuntime,
+) -> Sequence[Path]:
     rendered_static, rendered_routes = _render_traefik_files(effective_args)
     traefik_static_path = _traefik_static_path()
     routes_path = _routes_path()
@@ -230,6 +233,13 @@ def _run_traefik_stage(effective_args: dict[str, object]) -> Sequence[Path]:
     dmguard_service_def = generate_dmguard_service_def()
     write_service_definition(traefik_service_def_path, traefik_service_def)
     write_service_definition(dmguard_service_def_path, dmguard_service_def)
+
+    runtime.install_service(traefik_service_def)
+    runtime.start_service(TRAEFIK_SERVICE_NAME)
+
+    traefik_status = runtime.get_service_status(TRAEFIK_SERVICE_NAME)
+    if traefik_status != "Running":
+        raise ValueError(f"{TRAEFIK_SERVICE_NAME} service status is not Running")
 
     return (
         traefik_static_path,
@@ -267,16 +277,9 @@ def _render_traefik_files(effective_args: dict[str, object]) -> tuple[str, str]:
 
 
 def _run_app_service_stage(runtime: SetupRuntime) -> Sequence[Path]:
-    traefik_service_def = generate_traefik_service_def()
     dmguard_service_def = generate_dmguard_service_def()
-    runtime.install_service(traefik_service_def)
     runtime.install_service(dmguard_service_def)
-    runtime.start_service(TRAEFIK_SERVICE_NAME)
     runtime.start_service(DMGUARD_SERVICE_NAME)
-
-    traefik_status = runtime.get_service_status(TRAEFIK_SERVICE_NAME)
-    if traefik_status != "Running":
-        raise ValueError(f"{TRAEFIK_SERVICE_NAME} service status is not Running")
 
     dmguard_status = runtime.get_service_status(DMGUARD_SERVICE_NAME)
     if dmguard_status != "Running":
@@ -291,6 +294,9 @@ def _run_public_reachability_stage(
     if https_result is None:
         raise ValueError("TLS check result missing")
 
+    # 400 is expected when the webhook endpoint receives a bare GET without
+    # a valid X CRC payload — it proves the route is publicly reachable and
+    # TLS terminates correctly even though the app rejects the request body.
     status_code = https_result.get("status_code")
     if status_code not in {200, 400}:
         raise ValueError(f"Unexpected public HTTPS status code: {status_code}")

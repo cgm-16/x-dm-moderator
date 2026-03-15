@@ -60,22 +60,22 @@ def make_setup_state():
                 finished_at="2026-03-11T12:00:07Z",
                 artifacts=[],
             ),
-            "x_webhook": StageStatus(
+            "app_service": StageStatus(
+                status="pending",
+                started_at=None,
+                finished_at=None,
+                artifacts=[],
+            ),
+            "warmup": StageStatus(
                 status="done",
                 started_at="2026-03-11T12:00:07Z",
                 finished_at="2026-03-11T12:00:08Z",
                 artifacts=[],
             ),
-            "warmup": StageStatus(
+            "x_webhook": StageStatus(
                 status="done",
                 started_at="2026-03-11T12:00:08Z",
                 finished_at="2026-03-11T12:00:09Z",
-                artifacts=[],
-            ),
-            "app_service": StageStatus(
-                status="pending",
-                started_at=None,
-                finished_at=None,
                 artifacts=[],
             ),
         },
@@ -183,9 +183,9 @@ def test_invalidate_changed_stages_resets_affected_stage_and_downstream() -> Non
         "traefik",
         "tls",
         "public_reachability",
-        "x_webhook",
-        "warmup",
         "app_service",
+        "warmup",
+        "x_webhook",
     ]
     assert state.effective_args["public_hostname"] == "safety-filter.duckdns.org"
     assert state.stages["preflight"].status == "done"
