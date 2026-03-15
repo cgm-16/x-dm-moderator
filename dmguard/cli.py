@@ -327,7 +327,9 @@ def handle_selftest(args) -> int:
     if mode == "video" and backend == "llavaguard":
         frames = extract_frames(target_path, target_path.stem)
         if not frames:
-            raise ValueError(f"No classifier frames extracted for selftest: {target_path}")
+            raise ValueError(
+                f"No classifier frames extracted for selftest: {target_path}"
+            )
         input_paths = [frame.path for frame in frames]
 
     try:

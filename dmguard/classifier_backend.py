@@ -34,7 +34,9 @@ def load_runtime_classifier(
     try:
         config = load_app_config(config_path)
     except FileNotFoundError:
-        logging.warning("Config not found at %s, falling back to fake classifier", config_path)
+        logging.warning(
+            "Config not found at %s, falling back to fake classifier", config_path
+        )
         return FAKE_CLASSIFIER_BASE_CMD, "fake"
 
     return build_runtime_classifier_cmd(config), config.classifier_backend

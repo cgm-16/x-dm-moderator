@@ -220,8 +220,9 @@ def test_build_parser_recognizes_cli_subcommands() -> None:
 
     assert parser.parse_args(["setup"]).command == "setup"
     assert (
-        parser.parse_args(["setup", "--classifier-backend", "llavaguard"])
-        .classifier_backend
+        parser.parse_args(
+            ["setup", "--classifier-backend", "llavaguard"]
+        ).classifier_backend
         == "llavaguard"
     )
     assert parser.parse_args(["reset", "--force"]).command == "reset"
