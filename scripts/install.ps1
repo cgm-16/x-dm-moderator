@@ -87,7 +87,7 @@ try {
 
 # --- Traefik binary -----------------------------------------------------------
 
-$traefikExe = Join-Path $ProgramFilesDir 'traefik' 'traefik.exe'
+$traefikExe = Join-Path (Join-Path $ProgramFilesDir 'traefik') 'traefik.exe'
 if (Test-Path $traefikExe) {
     Write-Host "--- Traefik binary already exists at $traefikExe, skipping download ---"
 } else {
