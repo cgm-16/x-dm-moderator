@@ -41,7 +41,7 @@ def test_install_service_builds_expected_servy_command(
             "--description",
             "XDMModerator application service",
             "--path",
-            "C:/Program Files/XDMModerator/dmguard.exe",
+            "C:/Program Files/XDMModerator/.venv/Scripts/python.exe",
             "--startupDir",
             "C:/Program Files/XDMModerator",
             "--startupType",
@@ -50,6 +50,7 @@ def test_install_service_builds_expected_servy_command(
             "C:/ProgramData/XDMModerator/logs/dmguard-service.out.log",
             "--stderr",
             "C:/ProgramData/XDMModerator/logs/dmguard-service.err.log",
+            "--params=-m dmguard",
             "--deps=XDMModeratorTraefik",
         ]
     ]

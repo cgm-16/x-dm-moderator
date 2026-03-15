@@ -296,6 +296,7 @@ def test_setup_collects_expected_inputs_and_persists_outputs(
     monkeypatch.setattr("builtins.input", lambda _: next(text_prompts))
     monkeypatch.setattr(cli.getpass, "getpass", lambda _: next(secret_prompts))
     monkeypatch.setattr(cli.sys, "platform", "win32")
+    monkeypatch.setattr(cli, "_run_preflight_checks", lambda: None)
     monkeypatch.setattr(
         cli,
         "execute_setup_flow",
@@ -367,6 +368,7 @@ def test_setup_uses_flags_without_prompting(
     monkeypatch.setattr("builtins.input", fail_prompt)
     monkeypatch.setattr(cli.getpass, "getpass", fail_prompt)
     monkeypatch.setattr(cli.sys, "platform", "win32")
+    monkeypatch.setattr(cli, "_run_preflight_checks", lambda: None)
     monkeypatch.setattr(
         cli,
         "execute_setup_flow",
@@ -958,3 +960,135 @@ def test_readycheck_end_to_end_via_subprocess(tmp_path: Path) -> None:
         "PASS traefik service running",
         "PASS app service running",
     ]
+
+
+def test_setup_preflight_fails_when_servy_cli_missing_on_windows(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, capsys
+) -> None:
+    cli = configure_cli_paths(monkeypatch, tmp_path)
+    app_root = tmp_path / "program-files"
+    app_root.mkdir(parents=True, exist_ok=True)
+
+    monkeypatch.setattr("builtins.input", lambda _: "dmguard.duckdns.org")
+    monkeypatch.setattr(cli.getpass, "getpass", lambda _: "secret-value")
+    monkeypatch.setattr(cli.sys, "platform", "win32")
+    monkeypatch.setattr(cli, "SERVY_CLI_PATH", tmp_path / "missing" / "servy-cli.exe")
+    monkeypatch.setattr(
+        cli, "TRAEFIK_BINARY_PATH", app_root / "traefik" / "traefik.exe"
+    )
+    monkeypatch.setattr(
+        cli, "TRAEFIK_TEMPLATES_DIR", app_root / "traefik" / "templates"
+    )
+    # Create traefik binary and templates so only servy is missing
+    (app_root / "traefik").mkdir(parents=True, exist_ok=True)
+    (app_root / "traefik" / "traefik.exe").write_text("binary", encoding="utf-8")
+    (app_root / "traefik" / "templates").mkdir(parents=True, exist_ok=True)
+    (app_root / "traefik" / "templates" / "traefik-static.yml.tpl").write_text(
+        "tpl", encoding="utf-8"
+    )
+
+    exit_code = cli.main(["setup"])
+
+    captured = capsys.readouterr()
+
+    assert exit_code == 1
+    assert "servy" in captured.err.lower()
+
+
+def test_setup_preflight_fails_when_traefik_binary_missing_on_windows(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, capsys
+) -> None:
+    cli = configure_cli_paths(monkeypatch, tmp_path)
+    app_root = tmp_path / "program-files"
+    app_root.mkdir(parents=True, exist_ok=True)
+
+    monkeypatch.setattr("builtins.input", lambda _: "dmguard.duckdns.org")
+    monkeypatch.setattr(cli.getpass, "getpass", lambda _: "secret-value")
+    monkeypatch.setattr(cli.sys, "platform", "win32")
+    monkeypatch.setattr(cli, "SERVY_CLI_PATH", app_root / "servy-cli.exe")
+    monkeypatch.setattr(
+        cli, "TRAEFIK_BINARY_PATH", app_root / "traefik" / "traefik.exe"
+    )
+    monkeypatch.setattr(
+        cli, "TRAEFIK_TEMPLATES_DIR", app_root / "traefik" / "templates"
+    )
+    # Create servy and templates but not traefik binary
+    (app_root / "servy-cli.exe").write_text("binary", encoding="utf-8")
+    (app_root / "traefik" / "templates").mkdir(parents=True, exist_ok=True)
+    (app_root / "traefik" / "templates" / "traefik-static.yml.tpl").write_text(
+        "tpl", encoding="utf-8"
+    )
+
+    exit_code = cli.main(["setup"])
+
+    captured = capsys.readouterr()
+
+    assert exit_code == 1
+    assert "traefik" in captured.err.lower()
+
+
+def test_setup_preflight_fails_when_templates_missing_on_windows(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, capsys
+) -> None:
+    cli = configure_cli_paths(monkeypatch, tmp_path)
+    app_root = tmp_path / "program-files"
+    app_root.mkdir(parents=True, exist_ok=True)
+
+    monkeypatch.setattr("builtins.input", lambda _: "dmguard.duckdns.org")
+    monkeypatch.setattr(cli.getpass, "getpass", lambda _: "secret-value")
+    monkeypatch.setattr(cli.sys, "platform", "win32")
+    monkeypatch.setattr(cli, "SERVY_CLI_PATH", app_root / "servy-cli.exe")
+    monkeypatch.setattr(
+        cli, "TRAEFIK_BINARY_PATH", app_root / "traefik" / "traefik.exe"
+    )
+    monkeypatch.setattr(
+        cli, "TRAEFIK_TEMPLATES_DIR", app_root / "traefik" / "templates"
+    )
+    # Create servy and traefik binary but no templates dir
+    (app_root / "servy-cli.exe").write_text("binary", encoding="utf-8")
+    (app_root / "traefik").mkdir(parents=True, exist_ok=True)
+    (app_root / "traefik" / "traefik.exe").write_text("binary", encoding="utf-8")
+
+    exit_code = cli.main(["setup"])
+
+    captured = capsys.readouterr()
+
+    assert exit_code == 1
+    assert "template" in captured.err.lower()
+
+
+def test_setup_preflight_passes_when_all_prereqs_present_on_windows(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    cli = configure_cli_paths(monkeypatch, tmp_path)
+    app_root = tmp_path / "program-files"
+
+    monkeypatch.setattr("builtins.input", lambda _: "dmguard.duckdns.org")
+    monkeypatch.setattr(cli.getpass, "getpass", lambda _: "secret-value")
+    monkeypatch.setattr(cli.sys, "platform", "win32")
+    monkeypatch.setattr(cli, "SERVY_CLI_PATH", app_root / "servy-cli.exe")
+    monkeypatch.setattr(
+        cli, "TRAEFIK_BINARY_PATH", app_root / "traefik" / "traefik.exe"
+    )
+    monkeypatch.setattr(
+        cli, "TRAEFIK_TEMPLATES_DIR", app_root / "traefik" / "templates"
+    )
+    monkeypatch.setattr(
+        cli,
+        "execute_setup_flow",
+        lambda state, *, state_path, effective_args, secret_values, logger, runtime: (
+            None
+        ),
+    )
+    # Create all prereqs
+    (app_root / "servy-cli.exe").parent.mkdir(parents=True, exist_ok=True)
+    (app_root / "servy-cli.exe").write_text("binary", encoding="utf-8")
+    (app_root / "traefik" / "templates").mkdir(parents=True, exist_ok=True)
+    (app_root / "traefik" / "traefik.exe").write_text("binary", encoding="utf-8")
+    (app_root / "traefik" / "templates" / "traefik-static.yml.tpl").write_text(
+        "tpl", encoding="utf-8"
+    )
+
+    exit_code = cli.main(["setup"])
+
+    assert exit_code == 0

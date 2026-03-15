@@ -2,6 +2,7 @@ import json
 from pathlib import Path
 
 import pytest
+import yaml
 
 from dmguard.setup_logger import SetupLogger
 from dmguard.setup_state import SETUP_STAGE_ORDER, SetupState, StageStatus
@@ -49,7 +50,7 @@ def setup_inputs() -> tuple[dict[str, object], dict[str, str]]:
 def write_templates(template_dir: Path) -> None:
     template_dir.mkdir(parents=True, exist_ok=True)
     (template_dir / "traefik-static.yml.tpl").write_text(
-        "entryPoint=:443\nemail={{ACME_EMAIL}}\nstorage={{ACME_STORAGE_PATH}}\n",
+        "entryPoint: ':443'\nemail: '{{ACME_EMAIL}}'\nstorage: '{{ACME_STORAGE_PATH}}'\ndata_dir: '{{TRAEFIK_DATA_DIR}}'\n",
         encoding="utf-8",
     )
     (template_dir / "routes-normal.yml.tpl").write_text(
@@ -57,7 +58,7 @@ def write_templates(template_dir: Path) -> None:
         encoding="utf-8",
     )
     (template_dir / "routes-debug.yml.tpl").write_text(
-        "http:\n  routers:\n    dashboard:\n      rule: Host(`{{PUBLIC_HOSTNAME}}`) && Path(`/dashboard`)\n",
+        "http:\n  routers:\n    webhook:\n      rule: Host(`{{PUBLIC_HOSTNAME}}`) && Path(`/webhooks/x`)\n    dashboard:\n      rule: PathPrefix(`/`)\n",
         encoding="utf-8",
     )
 
@@ -250,3 +251,53 @@ def test_execute_setup_flow_fails_when_service_does_not_reach_running_state(
         )
 
     assert state.stages["app_service"].status == "failed"
+
+
+def test_render_traefik_files_debug_produces_valid_yaml_with_both_routers(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    import dmguard.setup_flow as setup_flow
+
+    template_dir = tmp_path / "templates"
+    write_templates(template_dir)
+    monkeypatch.setattr(setup_flow, "TRAEFIK_DIR", tmp_path / "traefik")
+    monkeypatch.setattr(setup_flow, "TRAEFIK_TEMPLATES_DIR", template_dir)
+
+    effective_args = {
+        "debug": True,
+        "debug_dashboard_port": 8081,
+        "public_hostname": "dmguard.duckdns.org",
+        "acme_email": "ops@example.com",
+    }
+    _, rendered_routes = setup_flow._render_traefik_files(effective_args)
+    parsed = yaml.safe_load(rendered_routes)
+
+    assert isinstance(parsed, dict)
+    routers = parsed["http"]["routers"]
+    assert "webhook" in routers, "debug routes must include the webhook router"
+    assert "dashboard" in routers, "debug routes must include the dashboard router"
+
+
+def test_render_traefik_files_normal_has_webhook_only(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    import dmguard.setup_flow as setup_flow
+
+    template_dir = tmp_path / "templates"
+    write_templates(template_dir)
+    monkeypatch.setattr(setup_flow, "TRAEFIK_DIR", tmp_path / "traefik")
+    monkeypatch.setattr(setup_flow, "TRAEFIK_TEMPLATES_DIR", template_dir)
+
+    effective_args = {
+        "debug": False,
+        "debug_dashboard_port": 8081,
+        "public_hostname": "dmguard.duckdns.org",
+        "acme_email": "ops@example.com",
+    }
+    _, rendered_routes = setup_flow._render_traefik_files(effective_args)
+    parsed = yaml.safe_load(rendered_routes)
+
+    assert isinstance(parsed, dict)
+    routers = parsed["http"]["routers"]
+    assert "webhook" in routers
+    assert "dashboard" not in routers

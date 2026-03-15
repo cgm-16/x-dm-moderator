@@ -12,6 +12,7 @@ SUPPORTED_PLACEHOLDERS: Final[frozenset[str]] = frozenset(
         "ACME_EMAIL",
         "ACME_STORAGE_PATH",
         "TRAEFIK_LOG_PATH",
+        "TRAEFIK_DATA_DIR",
     }
 )
 

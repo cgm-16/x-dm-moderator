@@ -261,17 +261,14 @@ def _render_traefik_files(effective_args: dict[str, object]) -> tuple[str, str]:
         "ACME_EMAIL": acme_email,
         "ACME_STORAGE_PATH": str(_acme_storage_path()),
         "TRAEFIK_LOG_PATH": str(LOGS_DIR / "traefik.log"),
+        "TRAEFIK_DATA_DIR": str(TRAEFIK_DIR),
     }
 
     rendered_static = render_template(_traefik_static_template_path(), template_vars)
-    rendered_routes = render_template(_routes_normal_template_path(), template_vars)
     if effective_args.get("debug") is True:
-        rendered_routes = "\n".join(
-            [
-                rendered_routes,
-                render_template(_routes_debug_template_path(), template_vars),
-            ]
-        )
+        rendered_routes = render_template(_routes_debug_template_path(), template_vars)
+    else:
+        rendered_routes = render_template(_routes_normal_template_path(), template_vars)
 
     return rendered_static, rendered_routes
 

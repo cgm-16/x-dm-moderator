@@ -27,14 +27,21 @@ from dmguard.repo_senders import (
     delete_blocked_sender,
     insert_allowed_sender,
 )
+from dmguard.edge import TRAEFIK_BINARY_PATH
 from dmguard.secrets import FileSecretStore, SECRET_KEYS
-from dmguard.service_manager import get_service_status, install_service, start_service
+from dmguard.service_manager import (
+    SERVY_CLI_PATH,
+    get_service_status,
+    install_service,
+    start_service,
+)
 from dmguard.setup_flow import (
     DUCKDNS_ARTIFACT_PATH,
     OPERATIONAL_STAGE_NAMES,
     SERVICES_DIR,
     SetupRuntime,
     TRAEFIK_DIR,
+    TRAEFIK_TEMPLATES_DIR,
     X_WEBHOOK_ARTIFACT_PATH,
     execute_setup_flow,
     skip_operational_stages,
@@ -227,6 +234,9 @@ def handle_setup(args) -> int:
 
     _write_yaml(CONFIG_PATH, effective_args)
     _write_json(SECRETS_PATH, secret_values)
+
+    if sys.platform.startswith("win"):
+        _run_preflight_checks()
 
     timestamp = _utc_now()
     state.last_command = "setup --verbose" if args.verbose else "setup"
@@ -620,6 +630,15 @@ def _load_or_create_setup_state() -> SetupState:
         },
         updated_at=_utc_now(),
     )
+
+
+def _run_preflight_checks() -> None:
+    if not SERVY_CLI_PATH.exists():
+        raise ValueError(f"Servy CLI not found: {SERVY_CLI_PATH}")
+    if not TRAEFIK_BINARY_PATH.exists():
+        raise ValueError(f"Traefik binary not found: {TRAEFIK_BINARY_PATH}")
+    if not TRAEFIK_TEMPLATES_DIR.is_dir():
+        raise ValueError(f"Template directory not found: {TRAEFIK_TEMPLATES_DIR}")
 
 
 def _mark_stage_done(
