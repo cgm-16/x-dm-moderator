@@ -49,9 +49,10 @@ def test_worker_loop_processes_a_queued_job(tmp_path: Path) -> None:
     async def scenario() -> None:
         dispatch_called = asyncio.Event()
 
-        async def dispatch_fn(job: dict[str, object]) -> None:
+        async def dispatch_fn(job: dict[str, object]) -> JobStatus:
             dispatched_jobs.append(job)
             dispatch_called.set()
+            return JobStatus.done
 
         task = asyncio.create_task(
             worker_loop(
@@ -100,7 +101,7 @@ def test_worker_loop_requeues_job_after_dispatch_exception(
     async def scenario() -> None:
         dispatch_called = asyncio.Event()
 
-        async def dispatch_fn(_: dict[str, object]) -> None:
+        async def dispatch_fn(_: dict[str, object]) -> JobStatus:
             dispatch_called.set()
             raise RuntimeError("boom")
 
@@ -148,7 +149,7 @@ def test_worker_loop_marks_job_error_when_retries_exhausted(tmp_path: Path) -> N
     async def scenario() -> None:
         dispatch_called = asyncio.Event()
 
-        async def dispatch_fn(_: dict[str, object]) -> None:
+        async def dispatch_fn(_: dict[str, object]) -> JobStatus:
             dispatch_called.set()
             raise RuntimeError("boom")
 
@@ -181,7 +182,7 @@ def test_worker_loop_stops_cleanly_on_cancellation(tmp_path: Path) -> None:
     db_path = tmp_path / "state.db"
     run(bootstrap_database(db_path))
 
-    async def dispatch_fn(_: dict[str, object]) -> None:
+    async def dispatch_fn(_: dict[str, object]) -> JobStatus:
         raise AssertionError("dispatch should not be called without queued jobs")
 
     async def scenario() -> None:
@@ -211,7 +212,7 @@ def test_worker_loop_runs_daily_prune_check_when_idle(
     db_path = tmp_path / "state.db"
     run(bootstrap_database(db_path))
 
-    async def dispatch_fn(_: dict[str, object]) -> None:
+    async def dispatch_fn(_: dict[str, object]) -> JobStatus:
         raise AssertionError("dispatch should not be called without queued jobs")
 
     async def scenario() -> None:
