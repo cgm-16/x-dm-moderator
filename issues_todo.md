@@ -62,6 +62,7 @@ GitHub repo: https://github.com/cgm-16/x-dm-moderator
 - [x] #26 Subprocess runner + timeout — deps: #25
 - [x] #27 Selftest CLI — deps: #26
 - [x] #96 Migrate classifier from ShieldGemma 2 to LlavaGuard v1.2 0.5B (contract rework supersedes #25/#26/#27 details)
+- [x] #114 Real LlavaGuard runtime inference path — deps: #96, #27
 
 ## Milestone 9 — Moderation Engine
 
