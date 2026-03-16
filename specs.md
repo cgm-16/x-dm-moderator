@@ -1,3 +1,7 @@
+> **Frozen v0.1 design reference.** This document captures the build blueprint and
+> implementation prompts as agreed during the design phase. It is not updated to reflect
+> implementation changes — see the codebase and [README.md](README.md) for the current state.
+
 Below is a **developer-ready build blueprint** for the frozen **v0.1** you decided in this conversation, followed by a **right-sized implementation sequence** and then a **series of code-generation prompts** that build on one another safely.
 
 I’m treating these as fixed product choices from our discussion:
