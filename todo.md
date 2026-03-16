@@ -91,7 +91,7 @@ Project: X DM Image Safety Filter Prototype (v0.1)
 - [x] Implement `POST /webhooks/x` for webhook deliveries
 - [x] Implement `GET /health`
 - [x] Implement `GET /version`
-- [ ] Implement optional local-only `/webhooks/test` in debug mode
+- [ ] Implement optional local-only `/webhooks/test` in debug mode (tracked in #129)
 - [x] Disable FastAPI docs/OpenAPI unless debug
 - [x] Keep public app surface minimal
 
@@ -148,18 +148,18 @@ Project: X DM Image Safety Filter Prototype (v0.1)
 - [x] Retry from failed stage
 - [x] Stage attempt counter resets on stage advance
 - [x] General retry backoff = 10s, 60s, 300s
-- [ ] 429 does not consume an attempt
+- [ ] 429 does not consume an attempt (tracked in #127)
   Current repo state: `schedule_429_retry` exists, but the worker does not route real 429 failures through it yet.
-- [ ] Queue cap = 5000
+- [ ] Queue cap = 5000 (tracked in #128)
   Current repo state: no enqueue-time queue-length cap is enforced in the webhook path yet.
-- [ ] Queue overflow drops newest incoming job
+- [ ] Queue overflow drops newest incoming job (tracked in #128)
   Current repo state: there is no logic to reject the newest incoming job when a queue limit is reached.
-- [ ] Queue overflow is tracked with counters only
+- [ ] Queue overflow is tracked with counters only (tracked in #128)
   Current repo state: `/health` reads drop counters from `kv_store`, but the enqueue/worker path does not populate them.
 - [x] Implement worker loop
 - [x] Implement transactional claim/update logic
 - [x] Implement retry scheduling
-- [ ] Implement queue overflow counters
+- [ ] Implement queue overflow counters (tracked in #128)
   Current repo state: counter keys are exposed in `/health` and covered by tests with seeded data, but no production code increments them.
 - [x] Add scheduler tests
 
@@ -182,16 +182,16 @@ Project: X DM Image Safety Filter Prototype (v0.1)
 
 - [x] DM lookup endpoint = `GET /2/dm_events/{event_id}`
 - [x] Shared X API timeout = 10 seconds
-- [ ] Proactive token refresh
+- [ ] Proactive token refresh (tracked in #130)
   Current repo state: `XClient` uses a static bearer token and does not run a refresh flow before requests.
-- [ ] Token expiry metadata stored in SQLite
+- [ ] Token expiry metadata stored in SQLite (tracked in #130)
   Current repo state: `token_expiry` appears only as a generic `kv_store` value in repository tests, not as runtime-managed metadata.
-- [ ] Refresh failure marks system misconfigured
+- [ ] Refresh failure marks system misconfigured (tracked in #130)
   Current repo state: refresh failure handling is not present because token refresh is not implemented.
 - [x] Implement secret loader
 - [x] Implement X API client
 - [x] Implement DM lookup DTO parsing
-- [ ] Implement proactive refresh
+- [ ] Implement proactive refresh (tracked in #130)
   Current repo state: request construction, timeout handling, and HTTP error parsing are implemented; runtime refresh remains missing.
 - [x] Add tests for request construction and parsing
 
@@ -267,13 +267,13 @@ Project: X DM Image Safety Filter Prototype (v0.1)
   - error
 - [x] `moderation_audit` uses typed columns only
 - [x] `moderation_audit` may allow multiple rows per job in schema
-- [ ] MVP behavior appends one final audit row per job
+- [ ] MVP behavior appends one final audit row per job (tracked in #131)
   Current repo state: moderation outcomes append audit rows, but dispatch exceptions that end in `job_errors` do not always get a final audit row.
 - [x] `moderation_audit` retention = 30 days
 - [x] `moderation_audit` index = `created_at` only
 - [x] Implement `job_errors`
 - [x] Implement `moderation_audit`
-- [ ] Write final audit row on terminal job outcome
+- [ ] Write final audit row on terminal job outcome (tracked in #131)
   Current repo state: safe, blocked, skipped_allowlist, text_only_logged, and block-failure error outcomes are audited; classifier timeout/error paths still rely on `job_errors` only.
 - [x] Add audit and error history tests
 
@@ -303,11 +303,11 @@ Project: X DM Image Safety Filter Prototype (v0.1)
 - [x] Setup tracks per-stage artifacts
 - [x] Stage invalidation is automatic
 - [x] `--verbose` explains invalidation/progress only
-- [ ] Rollback is best-effort
+- [ ] Rollback is best-effort (tracked in #132)
   Current repo state: setup writes state and logs, but no setup rollback implementation exists yet.
-- [ ] Rollback attempts = 3 with 1s, 5s, 10s
+- [ ] Rollback attempts = 3 with 1s, 5s, 10s (tracked in #132)
   Current repo state: no setup rollback retry loop exists yet.
-- [ ] Continue even if rollback fails
+- [ ] Continue even if rollback fails (tracked in #132)
   Current repo state: rollback failure handling is not present because setup rollback is not implemented yet.
 - [x] Setup writes append-only `setup.log`
 - [x] `setup.log` always redacts secrets
@@ -331,7 +331,7 @@ Project: X DM Image Safety Filter Prototype (v0.1)
   Current repo state: `setup` now runs TLS and public-reachability verification before installing/starting the `dmguard` service.
 - [x] Generate Traefik service definition
 - [x] Generate `dmguard` service definition
-- [ ] Implement service install/start/update logic
+- [ ] Implement service install/start/update logic (tracked in #132)
   Current repo state: service-definition generation plus install/start are implemented through Servy; explicit update semantics are not separately verified.
 - [x] Add service config generation tests
 
@@ -343,11 +343,11 @@ Project: X DM Image Safety Filter Prototype (v0.1)
 - [x] `config.yaml` is installer-authored, runtime-read, non-secret config
 - [x] Public HTTPS reachability is checked before webhook registration
   Current repo state: `setup` now runs the public HTTPS probe before the webhook registration step.
-- [ ] Unsupported environment => setup fails
+- [ ] Unsupported environment => setup fails (tracked in #133)
   Current repo state: non-Windows environments now skip the Windows-only ingress stages instead of failing through a dedicated preflight rejection.
 - [x] Implement setup subcommands (`setup`, `reset --force`, `warmup`, `status`, `status --full`)
 - [x] Add setup CLI tests
-- [ ] Implement preflight stage
+- [ ] Implement preflight stage (tracked in #133)
   Current repo state: `setup` records the `preflight` stage in `setup_state.json`, but no environment validation step runs yet.
 - [x] Implement local config stage
   Current repo state: `setup` writes `config.yaml` and marks `local_config` done inside `dmguard setup`.
@@ -411,17 +411,17 @@ Project: X DM Image Safety Filter Prototype (v0.1)
 - [x] Stale processing recovery after restart
 
 ### Manual environment validation
-- [ ] DuckDNS resolves to current public IP
+- [ ] DuckDNS resolves to current public IP (tracked in #134)
   Current repo state: `status --full` includes a DuckDNS DNS-resolution check; external/manual validation is still open.
-- [ ] Public 443 reachable from outside
+- [ ] Public 443 reachable from outside (tracked in #134)
   Current repo state: `status --full` includes an HTTPS probe; outside-in network validation is still open.
-- [ ] TLS-ALPN-01 certificate issued successfully
-- [ ] Traefik proxies only `/webhooks/x`
+- [ ] TLS-ALPN-01 certificate issued successfully (tracked in #134)
+- [ ] Traefik proxies only `/webhooks/x` (tracked in #134)
   Current repo state: template and service-definition generation are covered by tests, but no live Traefik environment validation is checked in.
-- [ ] X webhook registration succeeds
-- [ ] CRC succeeds
+- [ ] X webhook registration succeeds (tracked in #134)
+- [ ] CRC succeeds (tracked in #134)
   Current repo state: the local CRC endpoint is covered by automated tests; external/manual validation is still open.
-- [ ] Real DM media path works end-to-end
+- [ ] Real DM media path works end-to-end (tracked in #134)
   Current repo state: mocked end-to-end acceptance tests exist, but no real X webhook/media environment run is checked in.
 
 ---
