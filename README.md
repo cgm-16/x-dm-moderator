@@ -1,6 +1,10 @@
 # X DM Moderator
 
-Prototype X DM safety filter for local development and deployment experiments.
+Local safety filter for X (Twitter) direct messages. Receives DM webhooks, classifies attached media for violence/gore using LlavaGuard, and auto-blocks unsafe senders. Designed for a single Windows host with an NVIDIA GPU.
+
+## Quick Start
+
+See [docs/installing.md](docs/installing.md) for the full Windows installation guide with CUDA prerequisites and troubleshooting.
 
 ## Developer Guide
 
@@ -44,20 +48,20 @@ Fill in the values below, then run:
 export DMGUARD_PUBLIC_HOSTNAME="dmguard.duckdns.org"
 export DMGUARD_ACME_EMAIL="ops@example.com"
 export DMGUARD_DUCKDNS_TOKEN="replace-me"
-export DMGUARD_X_ACCESS_TOKEN="replace-me"
+export DMGUARD_X_CLIENT_ID="replace-me"
 export DMGUARD_X_CONSUMER_SECRET="replace-me"
-export DMGUARD_X_USER_ID="replace-me"
 export DMGUARD_HF_TOKEN="replace-me"
 
 uv run dmguard setup --verbose \
   --public-hostname "$DMGUARD_PUBLIC_HOSTNAME" \
   --acme-email "$DMGUARD_ACME_EMAIL" \
   --duckdns-token "$DMGUARD_DUCKDNS_TOKEN" \
-  --x-access-token "$DMGUARD_X_ACCESS_TOKEN" \
+  --x-client-id "$DMGUARD_X_CLIENT_ID" \
   --x-consumer-secret "$DMGUARD_X_CONSUMER_SECRET" \
-  --x-user-id "$DMGUARD_X_USER_ID" \
   --hf-token "$DMGUARD_HF_TOKEN"
 ```
+
+Setup uses OAuth PKCE to obtain the X access token, refresh token, and user ID automatically — no manual token entry required. A browser window opens during the X auth stage for authorization.
 
 This writes the local runtime files under the resolved data root:
 
@@ -152,3 +156,9 @@ uv run pytest
 ```bash
 uv run ruff check .
 ```
+
+## Documentation
+
+- [Installation Guide](docs/installing.md) — full Windows setup with CUDA prerequisites
+- [Specification](specs.md) — frozen v0.1 design reference
+- [Whitepaper](docs/archive/whitepaper.md) — archived build blueprint
