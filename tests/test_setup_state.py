@@ -54,16 +54,16 @@ def make_setup_state():
                 finished_at="2026-03-11T12:00:06Z",
                 artifacts=["C:/ProgramData/XDMModerator/traefik/acme.json"],
             ),
-            "public_reachability": StageStatus(
-                status="done",
-                started_at="2026-03-11T12:00:06Z",
-                finished_at="2026-03-11T12:00:07Z",
-                artifacts=[],
-            ),
             "app_service": StageStatus(
                 status="pending",
                 started_at=None,
                 finished_at=None,
+                artifacts=[],
+            ),
+            "public_reachability": StageStatus(
+                status="done",
+                started_at="2026-03-11T12:00:06Z",
+                finished_at="2026-03-11T12:00:07Z",
                 artifacts=[],
             ),
             "warmup": StageStatus(
@@ -182,8 +182,8 @@ def test_invalidate_changed_stages_resets_affected_stage_and_downstream() -> Non
         "duckdns",
         "traefik",
         "tls",
-        "public_reachability",
         "app_service",
+        "public_reachability",
         "warmup",
         "x_webhook",
     ]
