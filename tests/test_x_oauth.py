@@ -1,3 +1,4 @@
+import asyncio
 import base64
 import hashlib
 import threading
@@ -100,6 +101,39 @@ def test_refresh_sends_correct_payload() -> None:
     assert "client_id=cid" in captured_request["body"]
 
 
+def test_async_refresh_sends_correct_payload() -> None:
+    from dmguard.x_oauth import async_refresh_access_token
+
+    captured_request = {}
+
+    async def handler(request: httpx.Request) -> httpx.Response:
+        captured_request["body"] = request.content.decode("utf-8")
+        return httpx.Response(
+            200,
+            json={"access_token": "new-at", "refresh_token": "new-rt"},
+        )
+
+    async def run_refresh() -> dict[str, str]:
+        transport = httpx.MockTransport(handler)
+        # Patch AsyncClient to use mock transport
+        original_init = httpx.AsyncClient.__init__
+
+        def patched_init(self, **kwargs):
+            kwargs["transport"] = transport
+            original_init(self, **kwargs)
+
+        with pytest.MonkeyPatch.context() as mp:
+            mp.setattr(httpx.AsyncClient, "__init__", patched_init)
+            return await async_refresh_access_token("cid", "old-rt")
+
+    result = asyncio.run(run_refresh())
+
+    assert result == {"access_token": "new-at", "refresh_token": "new-rt"}
+    assert "grant_type=refresh_token" in captured_request["body"]
+    assert "refresh_token=old-rt" in captured_request["body"]
+    assert "client_id=cid" in captured_request["body"]
+
+
 def test_fetch_user_id_returns_id() -> None:
     from dmguard.x_oauth import fetch_authenticated_user_id
 
@@ -113,34 +147,23 @@ def test_fetch_user_id_returns_id() -> None:
     assert user_id == "12345"
 
 
-def test_callback_server_captures_code() -> None:
+def test_callback_handler_captures_code() -> None:
     import http.server
     from urllib.parse import urlencode
 
-    from dmguard.x_oauth import CALLBACK_PORT
+    from dmguard.x_oauth import _make_callback_handler
 
     callback_result: dict[str, str] = {}
-
-    class TestHandler(http.server.BaseHTTPRequestHandler):
-        def do_GET(self) -> None:
-            query = parse_qs(urlparse(self.path).query)
-            callback_result["code"] = query.get("code", [""])[0]
-            callback_result["state"] = query.get("state", [""])[0]
-            self.send_response(200)
-            self.end_headers()
-            self.wfile.write(b"ok")
-
-        def log_message(self, format, *args) -> None:
-            pass
-
-    server = http.server.HTTPServer(("127.0.0.1", CALLBACK_PORT), TestHandler)
+    handler_class = _make_callback_handler(callback_result)
+    server = http.server.HTTPServer(("127.0.0.1", 0), handler_class)
+    port = server.server_address[1]
     server.timeout = 5
 
     thread = threading.Thread(target=server.handle_request)
     thread.start()
 
     params = urlencode({"code": "test-code", "state": "test-state"})
-    response = httpx.get(f"http://127.0.0.1:{CALLBACK_PORT}/callback?{params}")
+    response = httpx.get(f"http://127.0.0.1:{port}/callback?{params}")
 
     thread.join(timeout=5)
     server.server_close()
@@ -148,3 +171,28 @@ def test_callback_server_captures_code() -> None:
     assert response.status_code == 200
     assert callback_result["code"] == "test-code"
     assert callback_result["state"] == "test-state"
+
+
+def test_callback_handler_captures_error() -> None:
+    import http.server
+    from urllib.parse import urlencode
+
+    from dmguard.x_oauth import _make_callback_handler
+
+    callback_result: dict[str, str] = {}
+    handler_class = _make_callback_handler(callback_result)
+    server = http.server.HTTPServer(("127.0.0.1", 0), handler_class)
+    port = server.server_address[1]
+    server.timeout = 5
+
+    thread = threading.Thread(target=server.handle_request)
+    thread.start()
+
+    params = urlencode({"error": "access_denied"})
+    response = httpx.get(f"http://127.0.0.1:{port}/callback?{params}")
+
+    thread.join(timeout=5)
+    server.server_close()
+
+    assert response.status_code == 200
+    assert callback_result["error"] == "access_denied"

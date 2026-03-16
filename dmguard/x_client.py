@@ -1,7 +1,7 @@
 import httpx
 
 from dmguard.secrets import SecretStore
-from dmguard.x_oauth import refresh_access_token
+from dmguard.x_oauth import async_refresh_access_token
 
 
 class RateLimitedError(Exception):
@@ -53,8 +53,9 @@ class XClient:
         if response.status_code == 429:
             raise RateLimitedError(_parse_retry_after(response))
 
+        # Single-worker architecture: no guard against concurrent refresh races.
         if response.status_code == 401:
-            self._refresh_token()
+            await self._refresh_token()
             response = await self._client.request(method, url, **kwargs)
             if response.status_code == 429:
                 raise RateLimitedError(_parse_retry_after(response))
@@ -64,12 +65,12 @@ class XClient:
 
         return response
 
-    def _refresh_token(self) -> None:
+    async def _refresh_token(self) -> None:
         """Refresh the OAuth access token and update stored secrets."""
         try:
             client_id = self._secret_store.get("x_client_id")
             old_refresh_token = self._secret_store.get("x_refresh_token")
-            tokens = refresh_access_token(client_id, old_refresh_token)
+            tokens = await async_refresh_access_token(client_id, old_refresh_token)
             self._secret_store.update("x_access_token", tokens["access_token"])
             self._secret_store.update("x_refresh_token", tokens["refresh_token"])
             self._client.headers["Authorization"] = f"Bearer {tokens['access_token']}"

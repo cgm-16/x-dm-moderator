@@ -71,6 +71,8 @@ class FileSecretStore(SecretStore):
             delete=False,
         ) as temp_file:
             temp_file.write(payload)
+            temp_file.flush()
+            os.fsync(temp_file.fileno())
             temp_path = Path(temp_file.name)
 
         os.replace(temp_path, self._path)

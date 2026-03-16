@@ -216,11 +216,18 @@ def handle_setup(args) -> int:
         "x_client_id": x_client_id,
     }
 
-    oauth_result = run_pkce_flow(x_client_id)
-    secret_values["x_access_token"] = oauth_result["x_access_token"]
-    secret_values["x_refresh_token"] = oauth_result["x_refresh_token"]
-    secret_values["x_user_id"] = oauth_result["x_user_id"]
     state = _load_or_create_setup_state()
+    x_auth_stage = state.stages.get("x_auth")
+    if x_auth_stage is not None and x_auth_stage.status == "done":
+        existing_store = FileSecretStore(SECRETS_PATH)
+        secret_values["x_access_token"] = existing_store.get("x_access_token")
+        secret_values["x_refresh_token"] = existing_store.get("x_refresh_token")
+        secret_values["x_user_id"] = existing_store.get("x_user_id")
+    else:
+        oauth_result = run_pkce_flow(x_client_id)
+        secret_values["x_access_token"] = oauth_result["x_access_token"]
+        secret_values["x_refresh_token"] = oauth_result["x_refresh_token"]
+        secret_values["x_user_id"] = oauth_result["x_user_id"]
     invalidated_stages: list[str] = []
     verbose_messages: list[str] = []
 

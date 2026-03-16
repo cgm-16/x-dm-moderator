@@ -374,6 +374,85 @@ def test_setup_collects_expected_inputs_and_persists_outputs(
     }
 
 
+def test_setup_skips_pkce_when_x_auth_already_done(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    cli = configure_cli_paths(monkeypatch, tmp_path)
+
+    # Pre-populate secrets and setup state with x_auth done
+    write_secret_file(cli.SECRETS_PATH)
+    state_path = cli.SETUP_STATE_PATH
+    state_path.parent.mkdir(parents=True, exist_ok=True)
+    state_path.write_text(
+        json.dumps(
+            {
+                "last_command": "setup",
+                "effective_args": {
+                    "debug": False,
+                    "log_level": "INFO",
+                    "classifier_backend": "fake",
+                    "port": 8080,
+                    "host": "127.0.0.1",
+                    "debug_dashboard_port": 8081,
+                    "public_hostname": "dmguard.duckdns.org",
+                    "acme_email": "ops@example.com",
+                },
+                "stages": {
+                    stage: {
+                        "status": "done",
+                        "started_at": "2026-03-11T12:00:00Z",
+                        "finished_at": "2026-03-11T12:00:01Z",
+                        "artifacts": [],
+                    }
+                    for stage in [
+                        "preflight",
+                        "local_config",
+                        "x_auth",
+                        "duckdns",
+                        "traefik",
+                        "tls",
+                        "app_service",
+                        "public_reachability",
+                        "warmup",
+                        "x_webhook",
+                    ]
+                },
+                "updated_at": "2026-03-11T12:00:00Z",
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    text_prompts = iter(["dmguard.duckdns.org", "ops@example.com", "client-id"])
+    secret_prompts = iter(["duckdns-token", "consumer-secret", "hf-token"])
+    monkeypatch.setattr("builtins.input", lambda _: next(text_prompts))
+    monkeypatch.setattr(cli.getpass, "getpass", lambda _: next(secret_prompts))
+    monkeypatch.setattr(cli.sys, "platform", "win32")
+    monkeypatch.setattr(cli, "_run_preflight_checks", lambda: None)
+    monkeypatch.setattr(
+        cli,
+        "run_pkce_flow",
+        lambda client_id: (_ for _ in ()).throw(
+            AssertionError("PKCE flow should not be called")
+        ),
+    )
+    monkeypatch.setattr(
+        cli,
+        "execute_setup_flow",
+        lambda state, *, state_path, effective_args, secret_values, logger, runtime: (
+            None
+        ),
+    )
+
+    exit_code = cli.main(["setup"])
+
+    assert exit_code == 0
+    saved_secrets = json.loads(cli.SECRETS_PATH.read_text(encoding="utf-8"))
+    assert saved_secrets["x_access_token"] == "access-token"
+    assert saved_secrets["x_refresh_token"] == "refresh-token"
+    assert saved_secrets["x_user_id"] == "user-id"
+
+
 def test_setup_uses_flags_without_prompting(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
