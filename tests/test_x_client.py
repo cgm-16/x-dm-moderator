@@ -100,12 +100,12 @@ def test_refreshes_token_on_401_and_retries() -> None:
         x_refresh_token="old-rt",
     )
 
-    def mock_refresh(client_id, refresh_token, **kwargs):
+    async def mock_refresh(client_id, refresh_token):
         return {"access_token": "new-token", "refresh_token": "new-rt"}
 
     async def perform_request() -> str:
         async with XClient(store, transport=httpx.MockTransport(handler)) as client:
-            with patch("dmguard.x_client.refresh_access_token", mock_refresh):
+            with patch("dmguard.x_client.async_refresh_access_token", mock_refresh):
                 response = await client.get("/2/test")
                 return response.text
 
@@ -128,12 +128,12 @@ def test_raises_error_when_retry_after_refresh_fails() -> None:
         x_refresh_token="rt",
     )
 
-    def mock_refresh(client_id, refresh_token, **kwargs):
+    async def mock_refresh(client_id, refresh_token):
         return {"access_token": "new-token", "refresh_token": "new-rt"}
 
     async def perform_request() -> None:
         async with XClient(store, transport=httpx.MockTransport(handler)) as client:
-            with patch("dmguard.x_client.refresh_access_token", mock_refresh):
+            with patch("dmguard.x_client.async_refresh_access_token", mock_refresh):
                 await client.get("/2/test")
 
     with pytest.raises(XApiError) as exc_info:
@@ -154,12 +154,12 @@ def test_raises_error_when_refresh_itself_fails() -> None:
         x_refresh_token="rt",
     )
 
-    def mock_refresh(client_id, refresh_token, **kwargs):
+    async def mock_refresh(client_id, refresh_token):
         raise RuntimeError("refresh exploded")
 
     async def perform_request() -> None:
         async with XClient(store, transport=httpx.MockTransport(handler)) as client:
-            with patch("dmguard.x_client.refresh_access_token", mock_refresh):
+            with patch("dmguard.x_client.async_refresh_access_token", mock_refresh):
                 await client.get("/2/test")
 
     with pytest.raises(XApiError) as exc_info:

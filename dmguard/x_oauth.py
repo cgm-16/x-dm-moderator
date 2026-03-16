@@ -1,4 +1,5 @@
 import base64
+from contextlib import contextmanager
 import hashlib
 import http.server
 import secrets
@@ -13,10 +14,22 @@ TOKEN_ENDPOINT = "https://api.x.com/2/oauth2/token"
 REDIRECT_URI = "http://localhost:8765/callback"
 SCOPES = "dm.read block.write offline.access"
 CALLBACK_PORT = 8765
+TOKEN_TIMEOUT_SECONDS = 30.0
 
 
 class OAuthCallbackError(Exception):
     """Raised when the OAuth callback fails or times out."""
+
+
+@contextmanager
+def _owned_client(http_client: httpx.Client | None = None):
+    """Yield an httpx.Client, closing it only if we created it."""
+    client = http_client or httpx.Client(timeout=TOKEN_TIMEOUT_SECONDS)
+    try:
+        yield client
+    finally:
+        if http_client is None:
+            client.close()
 
 
 def generate_pkce_pair() -> tuple[str, str]:
@@ -56,12 +69,8 @@ def exchange_code_for_tokens(
         "client_id": client_id,
         "code_verifier": code_verifier,
     }
-    client = http_client or httpx.Client()
-    try:
+    with _owned_client(http_client) as client:
         response = client.post(TOKEN_ENDPOINT, data=payload)
-    finally:
-        if http_client is None:
-            client.close()
 
     if response.is_error:
         raise OAuthCallbackError(
@@ -87,12 +96,8 @@ def refresh_access_token(
         "refresh_token": refresh_token,
         "client_id": client_id,
     }
-    client = http_client or httpx.Client()
-    try:
+    with _owned_client(http_client) as client:
         response = client.post(TOKEN_ENDPOINT, data=payload)
-    finally:
-        if http_client is None:
-            client.close()
 
     if response.is_error:
         raise OAuthCallbackError(
@@ -112,15 +117,11 @@ def fetch_authenticated_user_id(
     http_client: httpx.Client | None = None,
 ) -> str:
     """Fetch the authenticated user's ID from X API."""
-    client = http_client or httpx.Client()
-    try:
+    with _owned_client(http_client) as client:
         response = client.get(
             "https://api.x.com/2/users/me",
             headers={"Authorization": f"Bearer {access_token}"},
         )
-    finally:
-        if http_client is None:
-            client.close()
 
     if response.is_error:
         raise OAuthCallbackError(
@@ -130,19 +131,35 @@ def fetch_authenticated_user_id(
     return response.json()["data"]["id"]
 
 
-def run_pkce_flow(client_id: str) -> dict[str, str]:
-    """Run the full OAuth 2.0 PKCE flow and return tokens + user ID.
+async def async_refresh_access_token(
+    client_id: str,
+    refresh_token: str,
+) -> dict[str, str]:
+    """Refresh an expired access token using the refresh token (async)."""
+    payload = {
+        "grant_type": "refresh_token",
+        "refresh_token": refresh_token,
+        "client_id": client_id,
+    }
+    async with httpx.AsyncClient(timeout=TOKEN_TIMEOUT_SECONDS) as client:
+        response = await client.post(TOKEN_ENDPOINT, data=payload)
 
-    Opens the user's browser for authorization, waits for the callback,
-    exchanges the code for tokens, and fetches the authenticated user ID.
+    if response.is_error:
+        raise OAuthCallbackError(
+            f"Token refresh failed ({response.status_code}): {response.text}"
+        )
 
-    Returns dict with keys: x_access_token, x_refresh_token, x_user_id
-    """
-    code_verifier, code_challenge = generate_pkce_pair()
-    state = secrets.token_urlsafe(16)
-    auth_url = build_authorization_url(client_id, code_challenge, state)
+    data = response.json()
+    return {
+        "access_token": data["access_token"],
+        "refresh_token": data["refresh_token"],
+    }
 
-    callback_result: dict[str, str] = {}
+
+def _make_callback_handler(
+    callback_result: dict[str, str],
+) -> type[http.server.BaseHTTPRequestHandler]:
+    """Build an HTTP request handler that captures the OAuth callback params."""
 
     class CallbackHandler(http.server.BaseHTTPRequestHandler):
         def do_GET(self) -> None:
@@ -165,7 +182,32 @@ def run_pkce_flow(client_id: str) -> dict[str, str]:
         def log_message(self, format, *args) -> None:
             pass
 
-    server = http.server.HTTPServer(("127.0.0.1", CALLBACK_PORT), CallbackHandler)
+    return CallbackHandler
+
+
+def run_pkce_flow(client_id: str) -> dict[str, str]:
+    """Run the full OAuth 2.0 PKCE flow and return tokens + user ID.
+
+    Opens the user's browser for authorization, waits for the callback,
+    exchanges the code for tokens, and fetches the authenticated user ID.
+
+    Returns dict with keys: x_access_token, x_refresh_token, x_user_id
+    """
+    code_verifier, code_challenge = generate_pkce_pair()
+    state = secrets.token_urlsafe(16)
+    auth_url = build_authorization_url(client_id, code_challenge, state)
+
+    callback_result: dict[str, str] = {}
+
+    try:
+        server = http.server.HTTPServer(
+            ("127.0.0.1", CALLBACK_PORT),
+            _make_callback_handler(callback_result),
+        )
+    except OSError as exc:
+        raise OAuthCallbackError(
+            f"Cannot start callback server on port {CALLBACK_PORT}: {exc}"
+        ) from exc
     server.timeout = 120
 
     try:
@@ -203,6 +245,8 @@ __all__ = [
     "REDIRECT_URI",
     "SCOPES",
     "TOKEN_ENDPOINT",
+    "TOKEN_TIMEOUT_SECONDS",
+    "async_refresh_access_token",
     "build_authorization_url",
     "exchange_code_for_tokens",
     "fetch_authenticated_user_id",
