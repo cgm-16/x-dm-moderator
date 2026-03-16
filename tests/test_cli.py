@@ -151,7 +151,9 @@ def write_secret_file(path: Path) -> None:
             {
                 "duckdns_token": "duckdns-token",
                 "x_access_token": "access-token",
+                "x_client_id": "client-id",
                 "x_consumer_secret": "consumer-secret",
+                "x_refresh_token": "refresh-token",
                 "x_user_id": "user-id",
                 "hf_token": "hf-token",
             }
@@ -244,7 +246,10 @@ def test_build_parser_recognizes_cli_subcommands() -> None:
         ).classifier_backend
         == "llavaguard"
     )
-    assert parser.parse_args(["setup", "--x-user-id", "user-1"]).x_user_id == "user-1"
+    assert (
+        parser.parse_args(["setup", "--x-client-id", "client-1"]).x_client_id
+        == "client-1"
+    )
     assert parser.parse_args(["reset", "--force"]).command == "reset"
     assert parser.parse_args(["warmup"]).command == "warmup"
     assert parser.parse_args(["status"]).command == "status"
@@ -282,11 +287,10 @@ def test_setup_collects_expected_inputs_and_persists_outputs(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
     cli = configure_cli_paths(monkeypatch, tmp_path)
-    text_prompts = iter(["dmguard.duckdns.org", "ops@example.com", "user-id"])
+    text_prompts = iter(["dmguard.duckdns.org", "ops@example.com", "client-id"])
     secret_prompts = iter(
         [
             "duckdns-token",
-            "access-token",
             "consumer-secret",
             "hf-token",
         ]
@@ -297,6 +301,15 @@ def test_setup_collects_expected_inputs_and_persists_outputs(
     monkeypatch.setattr(cli.getpass, "getpass", lambda _: next(secret_prompts))
     monkeypatch.setattr(cli.sys, "platform", "win32")
     monkeypatch.setattr(cli, "_run_preflight_checks", lambda: None)
+    monkeypatch.setattr(
+        cli,
+        "run_pkce_flow",
+        lambda client_id: {
+            "x_access_token": "access-token",
+            "x_refresh_token": "refresh-token",
+            "x_user_id": "user-id",
+        },
+    )
     monkeypatch.setattr(
         cli,
         "execute_setup_flow",
@@ -326,10 +339,12 @@ def test_setup_collects_expected_inputs_and_persists_outputs(
             },
             {
                 "duckdns_token": "duckdns-token",
-                "x_access_token": "access-token",
                 "x_consumer_secret": "consumer-secret",
-                "x_user_id": "user-id",
                 "hf_token": "hf-token",
+                "x_client_id": "client-id",
+                "x_access_token": "access-token",
+                "x_refresh_token": "refresh-token",
+                "x_user_id": "user-id",
             },
         )
     ]
@@ -350,10 +365,12 @@ def test_setup_collects_expected_inputs_and_persists_outputs(
     }
     assert saved_secrets == {
         "duckdns_token": "duckdns-token",
-        "x_access_token": "access-token",
         "x_consumer_secret": "consumer-secret",
-        "x_user_id": "user-id",
         "hf_token": "hf-token",
+        "x_client_id": "client-id",
+        "x_access_token": "access-token",
+        "x_refresh_token": "refresh-token",
+        "x_user_id": "user-id",
     }
 
 
@@ -371,6 +388,15 @@ def test_setup_uses_flags_without_prompting(
     monkeypatch.setattr(cli, "_run_preflight_checks", lambda: None)
     monkeypatch.setattr(
         cli,
+        "run_pkce_flow",
+        lambda client_id: {
+            "x_access_token": "access-token",
+            "x_refresh_token": "refresh-token",
+            "x_user_id": "user-id",
+        },
+    )
+    monkeypatch.setattr(
+        cli,
         "execute_setup_flow",
         lambda state, *, state_path, effective_args, secret_values, logger, runtime: (
             None
@@ -384,14 +410,12 @@ def test_setup_uses_flags_without_prompting(
             "dmguard.duckdns.org",
             "--acme-email",
             "ops@example.com",
+            "--x-client-id",
+            "client-id",
             "--duckdns-token",
             "duckdns-token",
-            "--x-access-token",
-            "access-token",
             "--x-consumer-secret",
             "consumer-secret",
-            "--x-user-id",
-            "user-id",
             "--hf-token",
             "hf-token",
         ]
@@ -962,6 +986,14 @@ def test_readycheck_end_to_end_via_subprocess(tmp_path: Path) -> None:
     ]
 
 
+def _stub_pkce_flow(client_id):
+    return {
+        "x_access_token": "access-token",
+        "x_refresh_token": "refresh-token",
+        "x_user_id": "user-id",
+    }
+
+
 def test_setup_preflight_fails_when_servy_cli_missing_on_windows(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path, capsys
 ) -> None:
@@ -972,6 +1004,7 @@ def test_setup_preflight_fails_when_servy_cli_missing_on_windows(
     monkeypatch.setattr("builtins.input", lambda _: "dmguard.duckdns.org")
     monkeypatch.setattr(cli.getpass, "getpass", lambda _: "secret-value")
     monkeypatch.setattr(cli.sys, "platform", "win32")
+    monkeypatch.setattr(cli, "run_pkce_flow", _stub_pkce_flow)
     monkeypatch.setattr(cli, "SERVY_CLI_PATH", tmp_path / "missing" / "servy-cli.exe")
     monkeypatch.setattr(
         cli, "TRAEFIK_BINARY_PATH", app_root / "traefik" / "traefik.exe"
@@ -1005,6 +1038,7 @@ def test_setup_preflight_fails_when_traefik_binary_missing_on_windows(
     monkeypatch.setattr("builtins.input", lambda _: "dmguard.duckdns.org")
     monkeypatch.setattr(cli.getpass, "getpass", lambda _: "secret-value")
     monkeypatch.setattr(cli.sys, "platform", "win32")
+    monkeypatch.setattr(cli, "run_pkce_flow", _stub_pkce_flow)
     monkeypatch.setattr(cli, "SERVY_CLI_PATH", app_root / "servy-cli.exe")
     monkeypatch.setattr(
         cli, "TRAEFIK_BINARY_PATH", app_root / "traefik" / "traefik.exe"
@@ -1037,6 +1071,7 @@ def test_setup_preflight_fails_when_templates_missing_on_windows(
     monkeypatch.setattr("builtins.input", lambda _: "dmguard.duckdns.org")
     monkeypatch.setattr(cli.getpass, "getpass", lambda _: "secret-value")
     monkeypatch.setattr(cli.sys, "platform", "win32")
+    monkeypatch.setattr(cli, "run_pkce_flow", _stub_pkce_flow)
     monkeypatch.setattr(cli, "SERVY_CLI_PATH", app_root / "servy-cli.exe")
     monkeypatch.setattr(
         cli, "TRAEFIK_BINARY_PATH", app_root / "traefik" / "traefik.exe"
@@ -1066,6 +1101,7 @@ def test_setup_preflight_passes_when_all_prereqs_present_on_windows(
     monkeypatch.setattr("builtins.input", lambda _: "dmguard.duckdns.org")
     monkeypatch.setattr(cli.getpass, "getpass", lambda _: "secret-value")
     monkeypatch.setattr(cli.sys, "platform", "win32")
+    monkeypatch.setattr(cli, "run_pkce_flow", _stub_pkce_flow)
     monkeypatch.setattr(cli, "SERVY_CLI_PATH", app_root / "servy-cli.exe")
     monkeypatch.setattr(
         cli, "TRAEFIK_BINARY_PATH", app_root / "traefik" / "traefik.exe"
