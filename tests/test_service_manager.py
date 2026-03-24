@@ -6,7 +6,7 @@ import pytest
 def test_install_service_builds_expected_servy_command(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    from dmguard.edge import generate_dmguard_service_def
+    from dmguard import edge
     from dmguard import service_manager
 
     recorded: list[list[str]] = []
@@ -27,7 +27,8 @@ def test_install_service_builds_expected_servy_command(
     monkeypatch.setattr(service_manager.sys, "platform", "win32")
     monkeypatch.setattr(service_manager.subprocess, "run", fake_run)
 
-    service_manager.install_service(generate_dmguard_service_def())
+    definition = edge.generate_dmguard_service_def()
+    service_manager.install_service(definition)
 
     assert recorded == [
         [
@@ -35,23 +36,23 @@ def test_install_service_builds_expected_servy_command(
             "install",
             "--quiet",
             "--name",
-            "XDMModerator",
+            str(definition["name"]),
             "--displayName",
-            "XDMModerator",
+            str(definition["displayName"]),
             "--description",
-            "XDMModerator application service",
+            str(definition["description"]),
             "--path",
-            "C:/Program Files/XDMModerator/.venv/Scripts/python.exe",
+            str(definition["path"]),
             "--startupDir",
-            "C:/Program Files/XDMModerator",
+            str(definition["startupDir"]),
             "--startupType",
-            "Automatic",
+            str(definition["startupType"]),
             "--stdout",
-            "C:/ProgramData/XDMModerator/logs/dmguard-service.out.log",
+            str(definition["stdout"]),
             "--stderr",
-            "C:/ProgramData/XDMModerator/logs/dmguard-service.err.log",
-            "--params=-m dmguard",
-            "--deps=XDMModeratorTraefik",
+            str(definition["stderr"]),
+            f"--params={definition['params']}",
+            f"--deps={'; '.join(str(dep) for dep in definition['deps'])}",
         ]
     ]
 

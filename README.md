@@ -22,7 +22,7 @@ uv sync --locked --all-groups
 
 ### Local path setup on macOS/Linux
 
-The default paths target the Windows install layout. For local work on macOS/Linux, point the app at local writable directories first:
+The default paths target the Windows install layout. For local work on macOS/Linux, you must point the app at local writable directories first. Commands fail clearly until both env vars are set:
 
 ```bash
 export DMGUARD_APP_ROOT="$PWD/.dmguard/app"

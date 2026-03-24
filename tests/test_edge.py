@@ -49,37 +49,37 @@ def test_write_routes_atomically_rejects_non_mapping_yaml(tmp_path: Path) -> Non
 
 
 def test_generate_traefik_service_def_contains_required_servy_fields() -> None:
-    from dmguard.edge import generate_traefik_service_def
+    from dmguard import edge
 
-    service_def = generate_traefik_service_def()
+    service_def = edge.generate_traefik_service_def()
 
     assert service_def == {
-        "name": "XDMModeratorTraefik",
+        "name": edge.TRAEFIK_SERVICE_NAME,
         "displayName": "XDMModerator Traefik",
         "description": "Traefik reverse proxy for XDMModerator",
-        "path": "C:/Program Files/XDMModerator/traefik/traefik.exe",
-        "startupDir": "C:/Program Files/XDMModerator/traefik",
-        "params": "--configFile=C:/ProgramData/XDMModerator/traefik/traefik-static.yml",
+        "path": str(edge.TRAEFIK_BINARY_PATH),
+        "startupDir": str(edge.TRAEFIK_STARTUP_DIR),
+        "params": f"--configFile={edge.TRAEFIK_STATIC_CONFIG_PATH}",
         "startupType": "Automatic",
-        "stdout": "C:/ProgramData/XDMModerator/logs/traefik-service.out.log",
-        "stderr": "C:/ProgramData/XDMModerator/logs/traefik-service.err.log",
+        "stdout": str(edge.LOGS_DIR / "traefik-service.out.log"),
+        "stderr": str(edge.LOGS_DIR / "traefik-service.err.log"),
     }
 
 
 def test_generate_dmguard_service_def_contains_dependency_on_traefik() -> None:
-    from dmguard.edge import generate_dmguard_service_def
+    from dmguard import edge
 
-    service_def = generate_dmguard_service_def()
+    service_def = edge.generate_dmguard_service_def()
 
     assert service_def == {
-        "name": "XDMModerator",
+        "name": edge.DMGUARD_SERVICE_NAME,
         "displayName": "XDMModerator",
         "description": "XDMModerator application service",
-        "path": "C:/Program Files/XDMModerator/.venv/Scripts/python.exe",
+        "path": str(edge.DMGUARD_PYTHON_PATH),
         "params": "-m dmguard",
-        "startupDir": "C:/Program Files/XDMModerator",
+        "startupDir": str(edge.PROGRAM_FILES_DIR),
         "startupType": "Automatic",
-        "stdout": "C:/ProgramData/XDMModerator/logs/dmguard-service.out.log",
-        "stderr": "C:/ProgramData/XDMModerator/logs/dmguard-service.err.log",
-        "deps": ["XDMModeratorTraefik"],
+        "stdout": str(edge.LOGS_DIR / "dmguard-service.out.log"),
+        "stderr": str(edge.LOGS_DIR / "dmguard-service.err.log"),
+        "deps": [edge.TRAEFIK_SERVICE_NAME],
     }
