@@ -10,6 +10,7 @@ from tempfile import gettempdir
 
 if not sys.platform.startswith("win"):
     # Keep pytest collection self-contained when dmguard.paths fails fast on non-Windows.
+    # Must run before any dmguard import (secrets.py imports paths at the top level).
     os.environ.setdefault(
         "DMGUARD_APP_ROOT",
         str(Path(gettempdir()) / "dmguard-test-app"),

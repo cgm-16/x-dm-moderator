@@ -54,7 +54,7 @@ def test_generate_traefik_service_def_contains_required_servy_fields() -> None:
     service_def = edge.generate_traefik_service_def()
 
     assert service_def == {
-        "name": edge.TRAEFIK_SERVICE_NAME,
+        "name": "XDMModeratorTraefik",
         "displayName": "XDMModerator Traefik",
         "description": "Traefik reverse proxy for XDMModerator",
         "path": str(edge.TRAEFIK_BINARY_PATH),
@@ -72,7 +72,7 @@ def test_generate_dmguard_service_def_contains_dependency_on_traefik() -> None:
     service_def = edge.generate_dmguard_service_def()
 
     assert service_def == {
-        "name": edge.DMGUARD_SERVICE_NAME,
+        "name": "XDMModerator",
         "displayName": "XDMModerator",
         "description": "XDMModerator application service",
         "path": str(edge.DMGUARD_PYTHON_PATH),
@@ -81,5 +81,5 @@ def test_generate_dmguard_service_def_contains_dependency_on_traefik() -> None:
         "startupType": "Automatic",
         "stdout": str(edge.LOGS_DIR / "dmguard-service.out.log"),
         "stderr": str(edge.LOGS_DIR / "dmguard-service.err.log"),
-        "deps": [edge.TRAEFIK_SERVICE_NAME],
+        "deps": ["XDMModeratorTraefik"],
     }

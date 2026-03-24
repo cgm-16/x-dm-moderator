@@ -131,7 +131,7 @@ def test_exported_path_constants_respect_non_windows_env_override(monkeypatch):
 
 
 @pytest.mark.skipif(sys.platform.startswith("win"), reason="non-Windows only")
-def test_importing_paths_without_non_windows_env_vars_fails_clearly(tmp_path: Path):
+def test_importing_paths_without_non_windows_env_vars_fails_clearly():
     repo_root = Path(__file__).resolve().parents[1]
     env = {
         key: value
