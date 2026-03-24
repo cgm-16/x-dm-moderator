@@ -84,6 +84,7 @@ class XClient:
         **kwargs: object,
     ) -> httpx.Response:
         request_kwargs = dict(kwargs)
+        # Caller-supplied Authorization is intentionally overridden.
         headers = httpx.Headers(request_kwargs.get("headers"))
         headers["Authorization"] = f"Bearer {self._secret_store.get('x_access_token')}"
         request_kwargs["headers"] = headers
