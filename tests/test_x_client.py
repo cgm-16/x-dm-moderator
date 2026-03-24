@@ -62,6 +62,38 @@ def test_x_client_raises_rate_limited_error_on_429() -> None:
     assert exc_info.value.retry_after_seconds == 17
 
 
+@pytest.mark.parametrize(
+    ("retry_after_header",),
+    [
+        (None,),
+        ("not-a-number",),
+        ("0",),
+    ],
+)
+def test_x_client_uses_minimum_rate_limit_delay_for_invalid_retry_after(
+    retry_after_header: str | None,
+) -> None:
+    from dmguard.x_client import RateLimitedError, XClient
+
+    async def handler(request: httpx.Request) -> httpx.Response:
+        headers = {}
+        if retry_after_header is not None:
+            headers["Retry-After"] = retry_after_header
+        return httpx.Response(429, headers=headers)
+
+    async def perform_request() -> None:
+        async with XClient(
+            StubSecretStore(x_access_token="access-token"),
+            transport=httpx.MockTransport(handler),
+        ) as client:
+            await client.get("/2/test")
+
+    with pytest.raises(RateLimitedError) as exc_info:
+        run(perform_request())
+
+    assert exc_info.value.retry_after_seconds == 1
+
+
 def test_x_client_raises_api_error_on_other_non_success_statuses() -> None:
     from dmguard.x_client import XApiError, XClient
 
@@ -82,6 +114,26 @@ def test_x_client_raises_api_error_on_other_non_success_statuses() -> None:
     assert exc_info.value.body == '{"error":"bad"}'
 
 
+def test_x_client_reads_access_token_for_each_request() -> None:
+    from dmguard.x_client import XClient
+
+    store = StubSecretStore(x_access_token="old-token")
+
+    async def handler(request: httpx.Request) -> httpx.Response:
+        assert request.headers["Authorization"] == "Bearer new-token"
+        return httpx.Response(200, text="ok")
+
+    async def perform_request() -> str:
+        async with XClient(store, transport=httpx.MockTransport(handler)) as client:
+            store.update("x_access_token", "new-token")
+            response = await client.get("/2/test")
+            return response.text
+
+    result = run(perform_request())
+
+    assert result == "ok"
+
+
 def test_refreshes_token_on_401_and_retries() -> None:
     from dmguard.x_client import XClient
 
@@ -91,7 +143,9 @@ def test_refreshes_token_on_401_and_retries() -> None:
         nonlocal call_count
         call_count += 1
         if call_count == 1:
+            assert request.headers["Authorization"] == "Bearer old-token"
             return httpx.Response(401, text="Unauthorized")
+        assert request.headers["Authorization"] == "Bearer new-token"
         return httpx.Response(200, text="ok")
 
     store = StubSecretStore(
