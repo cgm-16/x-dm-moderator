@@ -7,6 +7,8 @@ import sys
 
 WINDOWS_PROGRAM_FILES_DIR = Path("C:/Program Files/XDMModerator")
 WINDOWS_PROGRAM_DATA_DIR = Path("C:/ProgramData/XDMModerator")
+NON_WINDOWS_APP_ROOT_ENV = "DMGUARD_APP_ROOT"
+NON_WINDOWS_DATA_ROOT_ENV = "DMGUARD_DATA_ROOT"
 
 
 @dataclass(frozen=True)
@@ -20,26 +22,40 @@ class ResolvedPaths:
     tmp_dir: Path
 
 
+def _resolve_non_windows_roots(env: Mapping[str, str]) -> tuple[Path, Path]:
+    app_root = env.get(NON_WINDOWS_APP_ROOT_ENV)
+    data_root = env.get(NON_WINDOWS_DATA_ROOT_ENV)
+    missing = []
+
+    if not app_root:
+        missing.append(NON_WINDOWS_APP_ROOT_ENV)
+
+    if not data_root:
+        missing.append(NON_WINDOWS_DATA_ROOT_ENV)
+
+    if missing:
+        raise ValueError(
+            "Non-Windows path resolution requires "
+            f"{NON_WINDOWS_APP_ROOT_ENV} and {NON_WINDOWS_DATA_ROOT_ENV}; "
+            f"missing: {', '.join(missing)}"
+        )
+
+    return Path(app_root), Path(data_root)
+
+
 def resolve_paths(
     *,
     platform: str | None = None,
     env: Mapping[str, str] | None = None,
 ) -> ResolvedPaths:
     current_platform = platform or sys.platform
-    current_env = env or os.environ
+    current_env = os.environ if env is None else env
 
-    program_files_dir = WINDOWS_PROGRAM_FILES_DIR
-    program_data_dir = WINDOWS_PROGRAM_DATA_DIR
-
-    if not current_platform.startswith("win"):
-        app_root = current_env.get("DMGUARD_APP_ROOT")
-        data_root = current_env.get("DMGUARD_DATA_ROOT")
-
-        if app_root:
-            program_files_dir = Path(app_root)
-
-        if data_root:
-            program_data_dir = Path(data_root)
+    if current_platform.startswith("win"):
+        program_files_dir = WINDOWS_PROGRAM_FILES_DIR
+        program_data_dir = WINDOWS_PROGRAM_DATA_DIR
+    else:
+        program_files_dir, program_data_dir = _resolve_non_windows_roots(current_env)
 
     return ResolvedPaths(
         program_files_dir=program_files_dir,
