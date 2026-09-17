@@ -1,0 +1,39 @@
+# Issue 27 Session Memory
+
+- Date: 2026-03-12
+- Requested issue: #27
+- Repo root branch at start: `main`
+- Repo root `git status --short`: `?? .worktrees/`
+- Existing repo note: `.codex-memory-issue-27-2026-03-12.md`
+- Existing worktrees:
+  - `.worktrees/ci-github-actions-workflow`
+  - `.worktrees/feat-edge-issue-35-service-definitions`
+  - `.worktrees/feat-issue-18-rejected-request-persistence`
+  - `.worktrees/feat-lifecycle-issue-12-worker-loop`
+  - `.worktrees/feat-media-dispatch-issue-22`
+  - `.worktrees/feat-media-download-issue-23`
+  - `.worktrees/feat-recovery-issue-11-stale-jobs`
+  - `.worktrees/recovery`
+- `todo.md` still shows classifier `selftest` CLI as not implemented.
+- `issues_todo.md` shows `#27 Selftest CLI` as not started and notes that `#40 Admin CLI` partially depends on it.
+- Planned branch: `feat/classifier-selftest-issue-27`
+- Planned worktree: `.worktrees/feat-classifier-selftest-issue-27`
+- GitHub issue title: `Selftest CLI`
+- Live issue scope:
+  - Add `dmguard selftest` CLI subcommand.
+  - Support `--image <path>` and `--video <path>`.
+  - Support `--force-safe` and `--force-unsafe`.
+  - Print human-readable results to stdout.
+  - Exit non-zero when classification fails.
+- Live issue tests:
+  - `--force-safe` prints safe result.
+  - `--force-unsafe` prints unsafe result with trigger info.
+  - Invalid path fails with a clear error message.
+- Root-cause hypothesis confirmed: `dmguard/cli.py` had no `selftest` subparser or handler, so the issue was missing at the CLI routing layer.
+- Implemented scope in worktree `feat/classifier-selftest-issue-27`:
+  - Added `selftest` parser/handler in `dmguard/cli.py`.
+  - Reused `run_classifier` with `dmguard.classifier_fake`.
+  - Added focused CLI tests for safe output, unsafe trigger output, and invalid path handling.
+- Verification:
+  - `uv run pytest tests/test_cli.py -k 'selftest or build_parser'`
+  - `uv run pytest tests/test_cli.py tests/test_classifier_fake.py tests/test_classifier_runner.py`
