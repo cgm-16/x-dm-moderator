@@ -7,7 +7,28 @@ gitignored scratch files on one machine.
 Read `../audit-2026-09.md` first for why the project is mothballed. This file is the
 engineering memory behind it.
 
+## Still live at mothball — read this first
+
+**One known bug was never fixed and is in the shipped code.** It was found in review,
+a fix direction was agreed, and the fix was never applied. The passing test suite does
+not contradict this: nothing covers it.
+
+- **`run_classifier` can raise `UnicodeDecodeError` out of the public API.**
+  `dmguard/classifier_runner.py:48` still passes `text=True` to `subprocess.Popen`, so
+  `communicate()` at `:52` decodes classifier output as UTF-8 and throws on anything
+  else. The `except Exception` at `:70` wraps only
+  `ClassifierResponse.model_validate_json()`, so the decode error is never converted
+  into `ClassifierError` and propagates to the caller uncaught.
+  `grep -c "UnicodeDecode\|errors=\|bytes" tests/test_classifier_runner.py` → **0**.
+  Agreed fix direction, per `raw/classifier-runner-review-fix.md`: capture stdout and
+  stderr as bytes, decode explicitly, convert decode failures into `ClassifierError`.
+  Note that the same bug shape *was* fixed at the webhook boundary
+  (`dmguard/app.py:572` catches `UnicodeDecodeError` and returns 400) — the classifier
+  boundary was missed.
+
 ## Bugs that were real, and what caused them
+
+These are fixed in the current tree; verified at mothball, not assumed from the notes.
 
 Each of these shipped or nearly shipped. They are recorded because the same shapes will
 recur in any rebuild.
@@ -20,10 +41,6 @@ recur in any rebuild.
   moderation `outcome="error"` to `JobStatus.done`, so unsafe media whose block attempt
   had failed was marked complete. Found in PR #106 review. This is the exact failure
   mode the audit flags as unacceptable for a hosted service.
-- **Subprocess decoding could throw before validation.** `subprocess.Popen(..., text=True)`
-  lets `communicate()` raise `UnicodeDecodeError` on non-UTF-8 classifier output, before
-  `ClassifierResponse.model_validate_json()` ever runs. Fix: capture bytes, decode
-  explicitly, convert decode failures into `ClassifierError`.
 - **Same shape at the webhook boundary.** `json.loads(raw_body)` on a signed request with
   invalid UTF-8 returned 500 instead of 400. Untrusted bytes need explicit decoding at
   every trust boundary, not implicit.
@@ -70,8 +87,8 @@ recur in any rebuild.
   against merged work more than once. The identified fix was to make them generated views
   or append-only normalized data, not merely lint them. A rebuild should not reproduce
   hand-maintained parallel ledgers.
-- The 20 issues still open at mothball time are labelled `mothballed` on GitHub. They are
-  real findings, not live work.
+- The 19 issues still open at mothball time are labelled `mothballed` on GitHub. They are
+  real findings, not live work. None of them covers the live decode bug above.
 
 ## `raw/`
 
