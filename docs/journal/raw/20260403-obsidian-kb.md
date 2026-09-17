@@ -1,0 +1,32 @@
+# Obsidian KB Memory
+
+- Date: 2026-04-03
+- Issue: `#138 docs: create Obsidian knowledge base for current project state`
+- Branch: `docs/obsidian-kb-main`
+- Worktree: `.worktrees/docs-obsidian-kb-main`
+- Vault target: `/Users/ori/ori-knowldge-base/x-dm-moderator`
+- Source pattern: mirror the numbered-folder structure and front matter used by `vridge/`
+- Branch basis for notes: `origin/main`
+- Durable repo facts:
+  - `x-dm-moderator` is a Python 3.12.12 project for moderating X DM media on a single Windows host with an NVIDIA GPU
+  - `README.md` is the current operator and developer truth, while `specs.md` is a frozen v0.1 design reference
+  - current architecture clusters around FastAPI ingress, SQLite-backed job state, worker and scheduler flow, X API integration, media download and frame extraction, classifier execution, setup orchestration, and Windows service and Traefik management
+  - the local checkout on `main` had an untracked `.worktrees/` directory and was behind `origin/main` before preflight sync
+- Recent GitHub decisions worth preserving:
+  - PR `#117` made the setup and ingress flow operational end to end
+  - PR `#122` fixed Traefik and service setup details and added install scripts
+  - PR `#125` replaced manual X token entry with OAuth PKCE and refresh support
+  - PR `#135` overhauled repo docs and clarified `README.md` plus `docs/installing.md`
+  - PR `#136` hardened X client auth header handling and `Retry-After` parsing
+  - PR `#137` required explicit non-Windows path overrides
+- Active issue hotspots:
+  - schema integrity gaps in `#58`
+  - secret-store file rereads in `#61`
+  - temp file cleanup failure in `#62`
+  - worker burst latency in `#89`
+  - selftest coverage gap in `#95`
+  - redaction module extraction in `#102`
+  - sender alias cleanup in `#103`
+  - platform-specific readycheck artifacts in `#118`
+  - fake non-Windows service status in `#119`
+  - `x_user_id` classification as secret vs config in `#120`

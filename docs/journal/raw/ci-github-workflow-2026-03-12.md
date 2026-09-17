@@ -1,0 +1,31 @@
+# CI workflow task memory
+
+- Date: 2026-03-12
+- Goal: add GitHub Actions CI for this repo.
+- Repo facts:
+  - Python project with `pyproject.toml` and `uv.lock`.
+  - Python version pinned to `==3.12.12`.
+  - Dev tools include `ruff`, `pytest`, `prek`.
+  - No tracked `.github/` directory exists yet.
+  - `uv run pytest --collect-only -q` collected 143 tests cleanly from repo root.
+- User choice from planning:
+  - Scope: lint + tests.
+  - Python coverage: single 3.12.
+- Expected workflow shape:
+  - Trigger on pull requests and pushes to `main`.
+  - Use `actions/checkout`, `actions/setup-python`, `astral-sh/setup-uv`.
+  - Run `uv sync --locked --all-groups`.
+  - Run `uv run ruff format --check .`, `uv run ruff check .`, `uv run pytest`.
+- Repo process reminders:
+  - Must use feature branch via `git worktree`.
+  - Must open issue before implementation.
+  - Must open PR after implementation.
+- Tracking:
+  - Issue: `#87` https://github.com/cgm-16/x-dm-moderator/issues/87
+  - PR: `#88` https://github.com/cgm-16/x-dm-moderator/pull/88
+- Verification outcome:
+  - `uv run pytest tests/test_ci_workflow.py` passed.
+  - `uv run ruff format --check .` passed.
+  - `uv run ruff check .` passed.
+  - `uv run pytest` failed because `tests/test_media_dispatch.py::test_dispatch_media_logs_and_skips_unknown_types` is already broken on branch base.
+  - Root cause: commit `e0bb90c` changed `dispatch_media()` to append unsupported media after logging instead of skipping it.

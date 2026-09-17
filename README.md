@@ -1,5 +1,18 @@
 # X DM Moderator
 
+> **Status: mothballed, 2026-09-17.** Not under development. The v0.1 client no longer
+> needs this and the product was not continued in this form.
+>
+> Read these before touching anything:
+> - [docs/audit-2026-09.md](docs/audit-2026-09.md) — why it stopped, what is worth reusing
+>   (46% of source), and what the X API findings were.
+> - [docs/thesis.md](docs/thesis.md) — the platform-independent idea, which is the part
+>   worth keeping.
+> - [docs/journal/](docs/journal/) — engineering memory: real bugs, environment traps,
+>   decisions not to relitigate.
+>
+> [specs.md](specs.md) describes a design that is superseded. Do not rebuild from it.
+
 Local safety filter for X (Twitter) direct messages. Receives DM webhooks, classifies attached media for violence/gore using LlavaGuard, and auto-blocks unsafe senders. Designed for a single Windows host with an NVIDIA GPU.
 
 ## Quick Start
@@ -159,6 +172,43 @@ uv run ruff check .
 
 ## Documentation
 
+- [Audit](docs/audit-2026-09.md) — mothball decision, reuse split, X API findings
+- [Thesis](docs/thesis.md) — the platform-independent idea
+- [Journal](docs/journal/) — engineering memory from the v0.1 build
 - [Installation Guide](docs/installing.md) — full Windows setup with CUDA prerequisites
-- [Specification](specs.md) — frozen v0.1 design reference
+- [Specification](specs.md) — **superseded** v0.1 design reference
 - [Whitepaper](docs/archive/whitepaper.md) — archived build blueprint
+
+## Verified state at mothball (2026-09-17)
+
+The suite was green when the project was paused, roughly six months after the last
+feature commit. Recorded so a future restore knows what "working" looked like rather
+than guessing.
+
+| Reading | Value |
+|---|---|
+| `uv run pytest -q` | 266 passed, 0 failed, 0 skipped |
+| `uv run ruff check .` | clean |
+| Last feature commit | 2026-03-24 |
+
+Resolved versions at that run (macOS, `DMGUARD_APP_ROOT` / `DMGUARD_DATA_ROOT` set per
+the local-path section above):
+
+| Package | Version |
+|---|---|
+| Python | 3.12.12 |
+| torch | 2.10.0 |
+| transformers | 5.3.0 |
+| fastapi | 0.135.1 |
+| pydantic | 2.12.5 |
+| httpx | 0.28.1 |
+| uvicorn | 0.41.0 |
+| aiosqlite | 0.22.1 |
+| pyyaml | 6.0.3 |
+| pytest | 9.0.2 |
+| ruff | 0.15.5 |
+
+`uv.lock` is the authoritative freeze — restore with `uv sync --locked --all-groups`.
+Note that `pyproject.toml` declares `torch>=2.10` and `transformers>=5.3` with no upper
+bound, so resolving *without* the lock will not reproduce this. `ffmpeg` on `PATH` is an
+unpinned external dependency of `frame_extractor.py`.

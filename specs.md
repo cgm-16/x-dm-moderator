@@ -1,3 +1,9 @@
+> **SUPERSEDED, 2026-09-17.** This design targets a single Windows host, a per-customer
+> DuckDNS + Traefik edge, and the Account Activity API — which X has since deprecated at a
+> 3-subscription ceiling. See [docs/audit-2026-09.md](docs/audit-2026-09.md) for what
+> replaced each of those conclusions, and [docs/thesis.md](docs/thesis.md) for the idea
+> that outlived them. Kept for historical reference. Do not rebuild from this document.
+
 > **Frozen v0.1 design reference.** This document captures the build blueprint and
 > implementation prompts as agreed during the design phase. It is not updated to reflect
 > implementation changes — see the codebase and [README.md](README.md) for the current state.
