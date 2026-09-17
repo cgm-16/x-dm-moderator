@@ -5,7 +5,7 @@
 >
 > Read these before touching anything:
 > - [docs/audit-2026-09.md](docs/audit-2026-09.md) — why it stopped, what is worth reusing
->   (46% of source), and what the X API findings were.
+>   (47% of source), and what the X API findings were.
 > - [docs/thesis.md](docs/thesis.md) — the platform-independent idea, which is the part
 >   worth keeping.
 > - [docs/journal/](docs/journal/) — engineering memory: real bugs, environment traps,
@@ -189,7 +189,7 @@ than guessing.
 |---|---|
 | `uv run pytest -q` | 266 passed, 0 failed, 0 skipped |
 | `uv run ruff check .` | clean |
-| Last feature commit | 2026-03-24 |
+| Last commit (`d470e40`, docs) | 2026-03-24 |
 
 Resolved versions at that run (macOS, `DMGUARD_APP_ROOT` / `DMGUARD_DATA_ROOT` set per
 the local-path section above):

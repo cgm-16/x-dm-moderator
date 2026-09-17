@@ -81,7 +81,7 @@ surface heading toward E2E encryption.
 Not the job queue. Not the ingress. Those are a week's work in any language.
 
 - **The classification policy** — a single named harm category, frames sampled at 1fps
-  from t=1s capped at 12s, block if any frame trips. About 420 lines in
+  from t=1s capped at 12s, block if any frame trips. 422 lines in
   `dmguard/moderator.py` and `dmguard/classifier_llavaguard.py`.
 - **The finding that the gap is enforcement, not detection.** That is the whole idea, and
   it took an audit to see clearly.
