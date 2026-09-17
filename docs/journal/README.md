@@ -20,8 +20,9 @@ not contradict this: nothing covers it.
   `ClassifierResponse.model_validate_json()`, so the decode error is never converted
   into `ClassifierError` and propagates to the caller uncaught.
   `grep -c "UnicodeDecode\|errors=\|bytes" tests/test_classifier_runner.py` → **0**.
-  Agreed fix direction, per `raw/classifier-runner-review-fix.md`: capture stdout and
-  stderr as bytes, decode explicitly, convert decode failures into `ClassifierError`.
+  Tracked as **#140**, with a reproduction. Agreed fix direction, per
+  `raw/classifier-runner-review-fix.md`: capture stdout and stderr as bytes, decode
+  explicitly, convert decode failures into `ClassifierError`.
   Note that the same bug shape *was* fixed at the webhook boundary
   (`dmguard/app.py:572` catches `UnicodeDecodeError` and returns 400) — the classifier
   boundary was missed.
@@ -87,8 +88,9 @@ recur in any rebuild.
   against merged work more than once. The identified fix was to make them generated views
   or append-only normalized data, not merely lint them. A rebuild should not reproduce
   hand-maintained parallel ledgers.
-- The 19 issues still open at mothball time are labelled `mothballed` on GitHub. They are
-  real findings, not live work. None of them covers the live decode bug above.
+- The open issues are all labelled `mothballed` on GitHub. They are real findings, not
+  live work. 19 carried over from the v0.1 build; #140 was filed at mothball for the live
+  decode bug above, which nothing else tracked.
 
 ## `raw/`
 
